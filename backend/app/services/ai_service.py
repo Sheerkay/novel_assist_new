@@ -16,7 +16,7 @@ def call_deepseek_api(messages, temperature=0.7, max_tokens=4000):
         "HTTP-Referer": current_app.config.get('SITE_URL', ''),
         "X-Title": current_app.config.get('SITE_NAME', '')
     }
-    payload = { "model": "deepseek/deepseek-chat-v3.1", "messages": messages, "temperature": temperature, "max_tokens": max_tokens }
+    payload = { "model": "deepseek/deepseek-v3.2-exp", "messages": messages, "temperature": temperature, "max_tokens": max_tokens }
     
     try:
         response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)

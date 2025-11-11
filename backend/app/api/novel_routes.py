@@ -18,7 +18,7 @@ def upload_file():
     
     allowed_extensions = current_app.config['ALLOWED_EXTENSIONS']
     if file and allowed_file(file.filename, allowed_extensions):
-        original_filename = secure_filename(file.filename)
+        original_filename = file.filename
         file_id = str(uuid.uuid4())
         _, file_extension = os.path.splitext(original_filename)
         storage_filename = f"{file_id}{file_extension}"
