@@ -166,3 +166,45 @@ def generate_with_analysis():
              return jsonify({'error': f"找不到文件ID为 {file_id} 的分析文件或原始文件。"}), 404
     
     return jsonify(result), 200
+
+@bp.route('/text-labels', methods=['GET', 'POST'])
+def manage_text_labels():
+    if request.method == 'GET':
+        # 获取当前文本标签配置
+        try:
+            from ..config.text_labels import get_all_text_labels
+            labels = get_all_text_labels()
+            return jsonify(labels)
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        # 更新文本标签配置
+        data = request.json
+        new_labels = data.get('labels', {})
+        
+        # 更新配置
+        from ..config.text_labels import update_text_labels
+        update_text_labels(new_labels)
+        return jsonify({'message': '文本标签更新成功', 'labels': new_labels})
+
+@bp.route('/generate', methods=['POST'])
+def generate_content():
+    data = request.json
+    prompt = data.get('prompt')
+    context = data.get('context', '')
+    context_chapters = data.get('context_chapters', [])
+    context_labels = data.get('context_labels', {}) # 接收前端传来的标签
+
+    # 使用前端传来的标签构建上下文
+    chapters_label = context_labels.get('chapters', '原文章节')
+    summaries_label = context_labels.get('summaries', '剧情梗概')
+
+    # 这里可以根据您的逻辑，将这些标签用于构建更精确的上下文描述
+    # 例如: f"参考 {chapters_label} 和 {summaries_label}..."
+    
+    generated_text = ai_service.generate_novel_content(prompt, context, context_chapters)
+    
+    if generated_text:
+        return jsonify({'generated_text': generated_text})
+    else:
+        return jsonify({'error': '生成内容失败'}), 500

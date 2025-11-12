@@ -12,22 +12,25 @@ def call_deepseek_api(messages, temperature=0.7, max_tokens=4000):
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "HTTP-Referer": current_app.config.get('SITE_URL', ''),
-        "X-Title": current_app.config.get('SITE_NAME', '')
+        "Content-Type": "application/json"
     }
-    payload = { "model": "deepseek/deepseek-v3.2-exp", "messages": messages, "temperature": temperature, "max_tokens": max_tokens }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
+    }
     
     try:
-        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+        response = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"API调用错误: {e}")
+        print(f"DeepSeek API调用错误: {e}")
         if e.response is not None:
             print(f"收到的错误响应 (状态码 {e.response.status_code}): {e.response.text}")
         else:
-            print("无法连接到API服务器。请检查网络连接、防火墙或代理设置。")
+            print("无法连接到DeepSeek API服务器。请检查网络连接、防火墙或代理设置。")
         return None
 
 def process_chapter_with_ai(chapter_content, user_prompt):

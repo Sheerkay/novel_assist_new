@@ -40,7 +40,7 @@
                                 <details class="context-category" id="context-chapters-category" open>
                                     <summary>
                                         <input type="checkbox" id="master-checkbox-chapters" class="master-checkbox" title="勾选以启用所有已选原文章节作为上下文" checked>
-                                        📚 原文章节
+                                        📚 <span id="chapters-label" contenteditable="true" title="点击可编辑标签">原文章节</span>
                                         <span class="item-count" id="chapters-preview-count">0 项</span>
                                     </summary>
                                     <ul class="context-preview-list" id="chapters-preview-list">
@@ -50,11 +50,21 @@
                                 <details class="context-category" id="context-summaries-category" open>
                                     <summary>
                                         <input type="checkbox" id="master-checkbox-summaries" class="master-checkbox" title="勾选以启用所有已选剧情梗概作为上下文" checked>
-                                        💡 剧情梗概
+                                        💡 <span id="summaries-label" contenteditable="true" title="点击可编辑标签">剧情梗概</span>
                                         <span class="item-count" id="summaries-preview-count">0 项</span>
                                     </summary>
                                     <ul class="context-preview-list" id="summaries-preview-list">
                                         <li class="placeholder">请通过“剧情库”选择或“存为剧情”添加梗概。</li>
+                                    </ul>
+                                </details>
+                                <details class="context-category" id="context-current-chapter-plot-category" open>
+                                    <summary>
+                                        <input type="checkbox" id="master-checkbox-current-chapter-plot" class="master-checkbox" title="勾选以启用所有已选当前原文章节剧情作为上下文" checked>
+                                        📝 <span id="current-chapter-plot-label" contenteditable="true" title="点击可编辑标签">当前原文章节剧情</span>
+                                        <span class="item-count" id="current-chapter-plot-preview-count">0 项</span>
+                                    </summary>
+                                    <ul class="context-preview-list" id="current-chapter-plot-preview-list">
+                                        <li class="placeholder">此区域用于存放从章节生成的临时剧情。</li>
                                     </ul>
                                 </details>
                             </div>
@@ -171,17 +181,19 @@
                     </div>
                     <ul id="plotListContainer" class="list-container"></ul>
                 </div>
-                <div id="plotPreviewArea" class="preview-area">
+                <div class="modal-right">
+                <div id="plotPreviewArea">
                     <h3>请从左侧选择剧情以预览</h3>
-                    <p style="color: #666;">您可以在此查看所有已保存的剧情梗概。具体的上下文选择请在主界面的勾选框中进行。</p>
+                    <p style="color: #666;">...</p>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="closePlotContextModalBtn">关闭</button>
-                <button class="btn btn-success" id="addSelectedPlotsBtn">添加至梗概</button>
-            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="addSelectedPlotsBtn" class="btn btn-primary">添加到梗概</button>
+            <button id="addSelectedPlotsToCurrentChapterPlotBtn" class="btn btn-primary">添加到当前原文剧情</button>
         </div>
     </div>
+</div>
 
     <div class="floating-action-bar">
         <button class="fab-btn" id="fabSelectContextBtn" title="加载小说原文">

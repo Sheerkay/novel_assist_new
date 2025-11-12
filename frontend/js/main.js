@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let chaptersForPreview = [];
     let summariesForPreview = [];
     let myDrafts = [];
+    let currentChapterPlotForPreview = []; // 新增：用于存放当前章节的剧情预览
 
     // =================================================================
     // 2. DOM元素引用
@@ -48,20 +49,50 @@ document.addEventListener('DOMContentLoaded', function() {
         changeNovelBtn: document.getElementById('changeNovelBtn'),
         cancelSourceSelectBtn: document.getElementById('cancelSourceSelectBtn'),
         plotListContainer: document.getElementById('plotListContainer'),
-        plotPreviewArea: document.getElementById('plotPreviewArea'),
-        closePlotContextModalBtn: document.getElementById('closePlotContextModalBtn'),
+    plotPreviewArea: document.getElementById('plotPreviewArea'),
         selectAllPlotsButton: document.getElementById('selectAllPlotsButton'),
         addSelectedPlotsBtn: document.getElementById('addSelectedPlotsBtn'),
+        addSelectedPlotsToCurrentChapterPlotBtn: document.getElementById('addSelectedPlotsToCurrentChapterPlotBtn'), // 新增按钮引用
         draftsListContainer: document.getElementById('draftsListContainer'),
         draftsPreviewArea: document.getElementById('draftsPreviewArea'),
         closeDraftsModalBtn: document.getElementById('closeDraftsModalBtn'),
         selectedContextToggle: document.getElementById('selected-context-toggle'),
         selectedContextDetails: document.getElementById('selected-context-details'),
+        chaptersLabel: document.getElementById('chapters-label'),
+        summariesLabel: document.getElementById('summaries-label'),
+        currentChapterPlotLabel: document.getElementById('current-chapter-plot-label'),
+        masterCheckboxCurrentChapterPlot: document.getElementById('master-checkbox-current-chapter-plot'),
+        currentChapterPlotPreviewList: document.getElementById('current-chapter-plot-preview-list'),
+        currentChapterPlotPreviewCount: document.getElementById('current-chapter-plot-preview-count'),
     };
 
     // =================================================================
-    // 3. localStorage 持久化管理
+    // 3. 文本标签与 localStorage 持久化管理
     // =================================================================
+    
+    function saveContextLabels() {
+        const labels = {
+            chapters: allElements.chaptersLabel.textContent,
+            summaries: allElements.summariesLabel.textContent,
+            currentChapterPlot: allElements.currentChapterPlotLabel.textContent
+        };
+        localStorage.setItem('novel_assist_context_labels', JSON.stringify(labels));
+    }
+
+    function loadContextLabels() {
+        const savedLabels = localStorage.getItem('novel_assist_context_labels');
+        if (savedLabels) {
+            const labels = JSON.parse(savedLabels);
+            allElements.chaptersLabel.textContent = labels.chapters || '原文章节';
+            allElements.summariesLabel.textContent = labels.summaries || '剧情梗概';
+            allElements.currentChapterPlotLabel.textContent = labels.currentChapterPlot || '当前原文章节剧情';
+        } else {
+            // 如果没有保存过，则使用默认值
+            allElements.chaptersLabel.textContent = '原文章节';
+            allElements.summariesLabel.textContent = '剧情梗概';
+            allElements.currentChapterPlotLabel.textContent = '当前原文章节剧情';
+        }
+    }
     
     function saveNovelToLocalStorage() {
         if (currentNovel) {
@@ -136,6 +167,31 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.masterCheckboxSummaries.disabled = summariesForPreview.length === 0;
         updateSelectedContextSummary();
     }
+
+    // 通用预览列表渲染函数
+    // listEl: UL 元素
+    // items: 数组，每项包含 {id, title, content}
+    // countEl: 显示数量的元素
+    // prefix: 用于产生每项 id/class 的前缀
+    // placeholderText: 空列表时显示的提示
+    function updatePreviewList(listEl, items, countEl, prefix, placeholderText) {
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        if (items && items.length > 0) {
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = item.title || item.name || '未命名剧情';
+                li.title = item.title || item.name || '未命名剧情';
+                listEl.appendChild(li);
+            });
+        } else {
+            const li = document.createElement('li');
+            li.className = 'placeholder';
+            li.textContent = placeholderText || '暂无内容';
+            listEl.appendChild(li);
+        }
+        if (countEl) countEl.textContent = `${items ? items.length : 0} 项`;
+    }
     
     function updateSelectedContextSummary() {
         const detailsContainer = allElements.selectedContextDetails;
@@ -157,6 +213,16 @@ document.addEventListener('DOMContentLoaded', function() {
             detailsHtml += '<h5 style="margin-top: 10px; margin-bottom: 5px;">💡 剧情梗概:</h5><ul style="list-style-position: inside; padding-left: 5px; margin:0;">';
             summariesForPreview.forEach(summary => {
                 detailsHtml += `<li style="margin-bottom: 3px;">${summary.title}</li>`;
+            });
+            detailsHtml += '</ul>';
+        }
+        
+        if (allElements.masterCheckboxCurrentChapterPlot.checked && currentChapterPlotForPreview.length > 0) {
+            totalCount += currentChapterPlotForPreview.length;
+            const label = allElements.currentChapterPlotLabel.textContent || '当前原文章节剧情';
+            detailsHtml += `<h5 style="margin-top: 10px; margin-bottom: 5px;">📝 ${label}:</h5><ul style="list-style-position: inside; padding-left: 5px; margin:0;">`;
+            currentChapterPlotForPreview.forEach(item => {
+                detailsHtml += `<li style="margin-bottom: 3px;">${item.title || '未命名剧情'}</li>`;
             });
             detailsHtml += '</ul>';
         }
@@ -324,6 +390,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     contextParts.push(`【剧情梗概：${summary.title}】\n${summary.content}`);
                 });
             }
+
+            const selectedCurrentChapterPlots = getSelectedContextItems(
+                'current-chapter-plot',
+                currentChapterPlotForPreview,
+                allElements.masterCheckboxCurrentChapterPlot
+            );
+
+            if (selectedCurrentChapterPlots.length > 0) {
+                const label = allElements.currentChapterPlotLabel.textContent;
+                contextParts.push(`### ${label}\n${selectedCurrentChapterPlots.map(item => item.content).join('\n\n')}`);
+            }
         }
 
         const contextString = contextParts.join('\n\n---\n\n');
@@ -431,7 +508,22 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.plotContextCount.textContent = plotContextSummaries.length;
     }
     
-    
+    function updateCurrentChapterPlotPreview() {
+        updatePreviewList(
+            allElements.currentChapterPlotPreviewList,
+            currentChapterPlotForPreview,
+            allElements.currentChapterPlotPreviewCount,
+            'current-chapter-plot',
+            '此区域用于存放从章节生成的临时剧情。'
+        );
+        allElements.masterCheckboxCurrentChapterPlot.disabled = currentChapterPlotForPreview.length === 0;
+        updateSelectedContextSummary();
+    }
+
+    function updateAllPreviews() {
+        renderContextPreviewArea(); // 更新章节和梗概
+        updateCurrentChapterPlotPreview(); // 更新当前原文剧情
+    }
 
     // =================================================================
     // 5. 其他辅助函数和事件绑定
@@ -504,6 +596,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     allElements.masterCheckboxChapters.addEventListener('change', updateSelectedContextSummary);
     allElements.masterCheckboxSummaries.addEventListener('change', updateSelectedContextSummary);
+    allElements.masterCheckboxCurrentChapterPlot.addEventListener('change', updateSelectedContextSummary);
 
     allElements.fabViewDraftsBtn.addEventListener('click', () => { renderDraftsList(); openModal(allElements.viewDraftsModal); });
     allElements.fabPlotContextBtn.addEventListener('click', () => { renderPlotContextModal(); openModal(allElements.plotContextModal); });
@@ -667,11 +760,9 @@ document.addEventListener('DOMContentLoaded', function() {
             : '未关联任何章节';
         allElements.plotPreviewArea.innerHTML = `<h3>${summary.title}</h3><p style="font-size: 0.85rem; color: #666; margin-top: -10px; margin-bottom: 15px;">${chapterInfo}</p><div style="white-space: pre-wrap;">${summary.content}</div>`;
     }
-    allElements.closePlotContextModalBtn.addEventListener('click', () => closeModal(allElements.plotContextModal));
-
     allElements.selectAllPlotsButton.addEventListener('click', () => {
         const checkboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox');
-        const isAllSelected = allElements.selectAllPlotsButton.textContent === '取消全选';
+        const isAllSelected = Array.from(checkboxes).every(cb => cb.checked);
         checkboxes.forEach(checkbox => {
             checkbox.checked = !isAllSelected;
         });
@@ -685,6 +776,21 @@ document.addEventListener('DOMContentLoaded', function() {
         summariesForPreview = plotContextSummaries.filter(summary => selectedIds.includes(String(summary.id)));
         
         renderContextPreviewArea();
+        closeModal(allElements.plotContextModal);
+    });
+
+    // 新增：为“添加到当前原文剧情”按钮添加事件监听
+    allElements.addSelectedPlotsToCurrentChapterPlotBtn.addEventListener('click', () => {
+        const selectedCheckboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox:checked');
+        if (selectedCheckboxes.length === 0) {
+            alert('请至少选中一个剧情');
+            return;
+        }
+
+        const selectedIds = Array.from(selectedCheckboxes).map(cb => String(cb.value));
+        currentChapterPlotForPreview = plotContextSummaries.filter(summary => selectedIds.includes(String(summary.id)));
+
+        updateCurrentChapterPlotPreview();
         closeModal(allElements.plotContextModal);
     });
 
@@ -732,4 +838,12 @@ document.addEventListener('DOMContentLoaded', function() {
     switchAppMode('edit'); // 默认进入编辑续写模式
     switchMainTab('plot-design'); // 默认显示剧情设计标签页
     appendQuickCommandButton(); // 初始加载时添加按钮
+
+    // 加载持久化的标签
+    loadContextLabels();
+
+    // 为可编辑标签添加事件监听
+    allElements.chaptersLabel.addEventListener('blur', saveContextLabels);
+    allElements.summariesLabel.addEventListener('blur', saveContextLabels);
+    allElements.currentChapterPlotLabel.addEventListener('blur', saveContextLabels);
 });

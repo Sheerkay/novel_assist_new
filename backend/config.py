@@ -16,7 +16,7 @@ class Config:
     
     # 新增：将 API Key 存储在这里
     # 警告：为了安全，未来最好通过环境变量加载此密钥
-    DEEPSEEK_API_KEY = "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"
+    DEEPSEEK_API_KEY = "sk-263c50cc236f4c45b92fbf8895956a64"
 
     # 确保上传目录存在
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
