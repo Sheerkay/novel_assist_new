@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
         fileNameDisplay: document.getElementById('fileNameDisplay'),
         uploadAndParseBtn: document.getElementById('uploadAndParseBtn'),
         changeNovelBtn: document.getElementById('changeNovelBtn'),
-        cancelSourceSelectBtn: document.getElementById('cancelSourceSelectBtn'),
+
         plotListContainer: document.getElementById('plotListContainer'),
     plotPreviewArea: document.getElementById('plotPreviewArea'),
         selectAllPlotsButton: document.getElementById('selectAllPlotsButton'),
@@ -310,10 +310,16 @@ document.addEventListener('DOMContentLoaded', function() {
     async function handleGenerateSummary() {
         // 1. 检查并获取选中的原文章节
         if (!allElements.masterCheckboxChapters.checked || chaptersForPreview.length === 0) {
-            return alert('请先在“附加上下文”区域勾选“原文章节”并确保已选择章节。');
+            return alert('请先在"附加上下文"区域勾选"原文章节"并确保已选择章节。');
         }
 
-        const selectedChapters = chaptersForPreview;
+        // 修复bug：确保与界面显示的计数逻辑一致
+        // 只有在勾选状态下才使用 chaptersForPreview 中的章节
+        const selectedChapters = allElements.masterCheckboxChapters.checked ? chaptersForPreview : [];
+        
+        if (selectedChapters.length === 0) {
+            return alert('当前没有可用的章节进行概括。请确保"原文章节"已勾选且包含内容。');
+        }
         const chapterContents = selectedChapters.map(chapter => {
             return `【章节：${chapter.title}】\n${chapter.content}`;
         }).join('\n\n---\n\n');
@@ -391,15 +397,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             }
 
-            const selectedCurrentChapterPlots = getSelectedContextItems(
-                'current-chapter-plot',
-                currentChapterPlotForPreview,
-                allElements.masterCheckboxCurrentChapterPlot
-            );
-
-            if (selectedCurrentChapterPlots.length > 0) {
+            if (allElements.masterCheckboxCurrentChapterPlot.checked && currentChapterPlotForPreview.length > 0) {
                 const label = allElements.currentChapterPlotLabel.textContent;
-                contextParts.push(`### ${label}\n${selectedCurrentChapterPlots.map(item => item.content).join('\n\n')}`);
+                contextParts.push(`### ${label}\n${currentChapterPlotForPreview.map(item => item.content).join('\n\n')}`);
             }
         }
 
@@ -636,7 +636,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 显示上传界面
         showUploadView();
     });
-    allElements.cancelSourceSelectBtn.addEventListener('click', () => closeModal(allElements.selectSourceModal));
+
 
     function showUploadView() {
         allElements.uploadView.style.display = 'block';
