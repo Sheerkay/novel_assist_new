@@ -342,6 +342,10 @@ document.addEventListener('DOMContentLoaded', function() {
             file_id: currentNovel ? currentNovel.file_id : null
         };
 
+        // 使用统一日志系统
+        Logger.chapter.summarize(selectedChapters);
+        Logger.api.request('/api/summarize-chapters', 'POST', requestBody);
+
         try {
             // 注意：我们使用的是一个新的API端点 /api/summarize-chapters
             const response = await fetch('/api/summarize-chapters', {
@@ -349,6 +353,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
             });
+            
+            Logger.api.response('/api/summarize-chapters', response.status, { ok: response.ok });
 
             const aiContentDiv = aiBubble.querySelector('.ai-content');
             if (!response.ok) {
@@ -357,6 +363,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const result = await response.json();
+            
+            Logger.chapter.summaryResult(result.summary);
             
             // 4. 显示结果
             aiContentDiv.innerHTML = marked.parse(result.summary);
@@ -407,7 +415,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const userBubble = document.createElement('div');
         userBubble.className = 'bubble user-bubble';
-        userBubble.innerHTML = `<p>${userPrompt}</p>`;
+        // 将换行符转换为 <br> 标签，并转义 HTML 特殊字符
+        const escapedPrompt = userPrompt
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        userBubble.innerHTML = `<p>${escapedPrompt}</p>`;
         allElements.conversationHistory.appendChild(userBubble);
         allElements.promptInput.value = '';
         allElements.promptInput.style.height = 'auto';
@@ -584,6 +598,26 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- 核心交互逻辑 ---
     allElements.sendPromptBtn.addEventListener('click', handleSendPrompt);
     allElements.promptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { handleSendPrompt(); } });
+    
+    // 自动调节输入框高度
+    function autoResizeTextarea() {
+        allElements.promptInput.style.height = 'auto';
+        allElements.promptInput.style.height = allElements.promptInput.scrollHeight + 'px';
+    }
+    allElements.promptInput.addEventListener('input', autoResizeTextarea);
+    allElements.promptInput.addEventListener('paste', () => setTimeout(autoResizeTextarea, 0));
+    
+    // 当输入框失去焦点时，恢复到初始高度
+    allElements.promptInput.addEventListener('blur', () => {
+        allElements.promptInput.style.height = '90px';
+    });
+    
+    // 当输入框获得焦点时，如果有内容则自动调整高度
+    allElements.promptInput.addEventListener('focus', () => {
+        if (allElements.promptInput.value.trim()) {
+            autoResizeTextarea();
+        }
+    });
 
     // 移除旧的静态事件监听
     // const quickGenerateSummaryBtn = document.getElementById('quick-generate-summary-btn');

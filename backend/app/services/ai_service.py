@@ -4,6 +4,7 @@ import json
 import re
 from flask import current_app
 from ..prompts.prompt_manager import get_prompt, get_system_prompt
+from ..utils.logger import ai_logger, log_ai_call
 
 def call_deepseek_api(messages, temperature=0.7, max_tokens=4000):
     api_key = current_app.config.get('DEEPSEEK_API_KEY')
@@ -51,8 +52,29 @@ def generate_chapter_summary(chapter_content):
     prompt = prompt_template.format(chapter_content=chapter_content[:4000])
     system_prompt = get_system_prompt('summarize_chapter_system')
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
+    
+    # 使用统一日志系统
+    log_ai_call(
+        prompt_type='章节概括',
+        prompt=f"System: {system_prompt}\n\nUser: {prompt}"
+    )
+    
     response = call_deepseek_api(messages, temperature=0.3, max_tokens=1500)
-    if response and 'choices' in response and len(response['choices']) > 0: return response['choices'][0]['message']['content']
+    
+    if response and 'choices' in response and len(response['choices']) > 0:
+        result = response['choices'][0]['message']['content']
+        log_ai_call(
+            prompt_type='章节概括',
+            prompt='',
+            response=result
+        )
+        return result
+    
+    log_ai_call(
+        prompt_type='章节概括',
+        prompt='',
+        error='DeepSeek API调用失败'
+    )
     return None
 
 def analyze_chapter_characters(chapter_content):

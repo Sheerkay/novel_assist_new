@@ -6,6 +6,7 @@ import json
 import time
 import re
 from app.services import ai_service, novel_service
+from app.utils.logger import api_logger, log_request, log_response, log_chapter_summary
 
 bp = Blueprint('generation', __name__, url_prefix='/api')
 
@@ -68,25 +69,45 @@ def process_chapter():
 def summarize_chapters_route():
     data = request.json
     chapters = data.get('chapters')
+    
+    # 使用统一日志系统
+    log_request('/api/summarize-chapters', {
+        'chapter_count': len(chapters) if chapters else 0,
+        'chapters': [{'title': c.get('title'), 'length': len(c.get('content', ''))} for c in chapters] if chapters else []
+    })
+    
     if not chapters:
+        api_logger.error('❌ 错误: 没有提供需要概括的章节')
         return jsonify({'error': '没有提供需要概括的章节'}), 400
+    
+    for i, chapter in enumerate(chapters):
+        api_logger.info(f'📖 章节 {i+1}: {chapter.get("title", "未命名")} ({len(chapter.get("content", ""))} 字符)')
 
     full_summary = ""
     for i, chapter in enumerate(chapters):
         chapter_content = chapter.get('content', '')
+        chapter_title = chapter.get('title', f'章节 {i+1}')
+        
+        api_logger.info(f'🤖 正在为第 {i+1} 章生成概括...')
+        
         # 调用AI服务生成单章概括
         single_summary = ai_service.generate_chapter_summary(chapter_content)
         
         if single_summary:
+            log_chapter_summary(i+1, chapter_title, len(chapter_content), True, single_summary)
             # 为每个概括添加标题，使其在UI中更清晰
-            full_summary += f"## {chapter.get('title', f'章节 {i+1}')} - 剧情概括\n{single_summary}\n\n"
+            full_summary += f"## {chapter_title} - 剧情概括\n{single_summary}\n\n"
         else:
+            log_chapter_summary(i+1, chapter_title, len(chapter_content), False)
             # 如果某一章节失败，可以记录或跳过
-            full_summary += f"## {chapter.get('title', f'章节 {i+1}')} - 剧情概括\n[本章概括生成失败]\n\n"
+            full_summary += f"## {chapter_title} - 剧情概括\n[本章概括生成失败]\n\n"
             
     if not full_summary.strip():
+        api_logger.error('❌ 所有章节的剧情概括都生成失败')
         return jsonify({'error': '所有章节的剧情概括都生成失败'}), 500
 
+    api_logger.info(f'✅ 全部章节概括完成，总长度: {len(full_summary)} 字符')
+    log_response('/api/summarize-chapters', 200, {'summary_length': len(full_summary)})
     return jsonify({'summary': full_summary.strip()})
 
 
@@ -131,22 +152,23 @@ def generate_with_analysis():
     file_id = data.get('file_id')
     upload_folder = current_app.config['UPLOAD_FOLDER']
     
-    if not file_id:
-        file_id = str(uuid.uuid4())
-        filename = f"创作_{int(time.time())}.txt"
-        filepath = os.path.join(upload_folder, 'generated', f"{file_id}_{filename}")
-        with open(filepath, 'w', encoding='utf-8') as f: f.write(content)
-        
-        chapters_info = { "file_id": file_id, "filename": filename, "chapters": newly_split_chapters, "is_generated": True, "generation_prompt": prompt, "target_chapters": chapter_count }
+    # 检查是否应该追加到已有文件
+    should_append = False
+    if file_id:
         chapters_file = os.path.join(upload_folder, 'analysis', f"{file_id}_chapters.json")
-        with open(chapters_file, 'w', encoding='utf-8') as f: json.dump(chapters_info, f, ensure_ascii=False, indent=2)
-        
-        result.update({ 'file_id': file_id, 'filename': filename, 'is_new': True })
-    else:
-        chapters_file = os.path.join(upload_folder, 'analysis', f"{file_id}_chapters.json")
+        if os.path.exists(chapters_file):
+            try:
+                with open(chapters_file, 'r', encoding='utf-8') as f: 
+                    chapters_info = json.load(f)
+                # 只有当文件是生成文件时才追加
+                if chapters_info.get('is_generated', False):
+                    should_append = True
+            except:
+                pass
+    
+    if should_append:
+        # 追加到已有的生成文件
         try:
-            with open(chapters_file, 'r', encoding='utf-8') as f: chapters_info = json.load(f)
-            
             novel_filename = chapters_info['filename']
             original_path_novel = os.path.join(upload_folder, 'novels', f"{file_id}{os.path.splitext(novel_filename)[1]}")
             original_path_generated = os.path.join(upload_folder, 'generated', f"{file_id}_{novel_filename}")
@@ -164,6 +186,18 @@ def generate_with_analysis():
             result.update({ 'is_new': False, 'file_id': file_id, 'chapters': final_chapters })
         except FileNotFoundError:
              return jsonify({'error': f"找不到文件ID为 {file_id} 的分析文件或原始文件。"}), 404
+    else:
+        # 创建新的生成文件（无论是否传入了file_id）
+        file_id = str(uuid.uuid4())
+        filename = f"创作_{int(time.time())}.txt"
+        filepath = os.path.join(upload_folder, 'generated', f"{file_id}_{filename}")
+        with open(filepath, 'w', encoding='utf-8') as f: f.write(content)
+        
+        chapters_info = { "file_id": file_id, "filename": filename, "chapters": newly_split_chapters, "is_generated": True, "generation_prompt": prompt, "target_chapters": chapter_count }
+        chapters_file = os.path.join(upload_folder, 'analysis', f"{file_id}_chapters.json")
+        with open(chapters_file, 'w', encoding='utf-8') as f: json.dump(chapters_info, f, ensure_ascii=False, indent=2)
+        
+        result.update({ 'file_id': file_id, 'filename': filename, 'is_new': True })
     
     return jsonify(result), 200
 
