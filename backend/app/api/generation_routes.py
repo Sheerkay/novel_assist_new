@@ -6,6 +6,7 @@ import json
 import time
 import re
 from app.services import ai_service, novel_service
+from app.services.context_manager import ContextManager
 from app.utils.logger import api_logger, log_request, log_response, log_chapter_summary
 
 bp = Blueprint('generation', __name__, url_prefix='/api')
@@ -130,8 +131,12 @@ def generate_with_analysis():
             'is_chat': True  # 标记这是普通对话
         }), 200
 
-    # 以下是小说创作流程（原有逻辑）
-    content = ai_service.generate_novel_content(prompt, context_string, [])
+    # 创建上下文管理器并设置上下文
+    context_manager = ContextManager()
+    context_manager.set_additional_context(context_string, [])
+    
+    # 根据不同的创作意图使用上下文管理器生成内容
+    content = ai_service.generate_content_with_intent(intent, prompt, context_manager)
     
     if not content: return jsonify({'error': '内容生成失败'}), 500
     

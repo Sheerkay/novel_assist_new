@@ -133,8 +133,10 @@ python run.py
 - `process_chapter.txt` - 章节处理
 
 ### 生成类提示词
-- `generate_novel_content.txt` - 小说内容生成
-- `system_prompts.txt` - 系统级提示词
+- `general_content.txt` - 通用内容生成（默认模板）
+- `plot_design.txt` - 剧情设计专用
+- `novel_generation.txt` - 小说正文生成专用
+- `system_prompts.txt` - 系统级提示词（包含意图识别）
 
 ## 使用说明
 

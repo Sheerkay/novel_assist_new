@@ -5,6 +5,7 @@ import re
 from flask import current_app
 from ..prompts.prompt_manager import get_prompt, get_system_prompt
 from ..utils.logger import ai_logger, log_ai_call
+from .context_manager import ContextManager
 
 def call_deepseek_api(messages, temperature=0.7, max_tokens=4000):
     api_key = current_app.config.get('DEEPSEEK_API_KEY')
@@ -111,14 +112,74 @@ def analyze_prompt_for_chapters(prompt):
         except (json.JSONDecodeError, ValueError) as e: print(f"解析章节数量错误: {e}")
     return 10
 
+def generate_content_with_intent(intent, user_prompt, context_manager):
+    """
+    根据意图生成内容（使用上下文管理器）
+    :param intent: 意图类型
+    :param user_prompt: 用户提示词
+    :param context_manager: 上下文管理器实例
+    :return: 生成的内容
+    """
+    # 根据意图选择对应的模板和系统提示词
+    intent_config = {
+        'plot_design': {
+            'template': 'plot_design',
+            'system': 'plot_design_system',
+            'temperature': 0.5
+        },
+        'novel_generation': {
+            'template': 'novel_generation',
+            'system': 'novel_generation_system',
+            'temperature': 0.7
+        },
+        'default': {
+            'template': 'general_content',
+            'system': 'generate_novel_system',
+            'temperature': 0.7
+        }
+    }
+    
+    config = intent_config.get(intent, intent_config['default'])
+    
+    # 使用上下文管理器构建消息
+    messages = context_manager.build_messages(
+        intent=intent,
+        user_prompt=user_prompt,
+        system_prompt_name=config['system'],
+        template_name=config['template']
+    )
+    
+    response = call_deepseek_api(messages, temperature=config['temperature'], max_tokens=4000)
+    
+    if response and 'choices' in response and len(response['choices']) > 0:
+        return response['choices'][0]['message']['content']
+    
+    return "AI响应为空或格式不正确。"
+
+# 保留旧的函数以保持向后兼容
 def generate_novel_content(prompt, context, context_chapters):
-    """使用AI生成小说内容，并要求其返回参考章节元数据"""
+    """使用AI生成内容（通用入口，适用于未明确分类的请求）"""
+    return _generate_content_with_template('general_content', 'generate_novel_system', 
+                                          prompt, context, context_chapters, temperature=0.7)
+
+def generate_plot_design(prompt, context, context_chapters):
+    """生成剧情设计方案"""
+    return _generate_content_with_template('plot_design', 'plot_design_system', 
+                                          prompt, context, context_chapters, temperature=0.5)
+
+def generate_full_novel(prompt, context, context_chapters):
+    """生成完整小说章节"""
+    return _generate_content_with_template('novel_generation', 'novel_generation_system', 
+                                          prompt, context, context_chapters, temperature=0.7)
+
+def _generate_content_with_template(template_name, system_name, prompt, context, context_chapters, temperature=0.7):
+    """内部函数：使用指定模板生成内容"""
     
     context_chapter_list = "\n".join([f"- 章节 {c.get('number', 'N/A')}: {c.get('title', '无标题')}" for c in context_chapters])
     
-    prompt_template = get_prompt('generate_novel_content')
+    prompt_template = get_prompt(template_name)
     if not prompt_template:
-        return "错误：无法加载生成小说内容的提示词模板。"
+        return f"错误：无法加载{template_name}提示词模板。"
         
     final_prompt = prompt_template.format(
         context=context,
@@ -126,13 +187,13 @@ def generate_novel_content(prompt, context, context_chapters):
         prompt=prompt
     )
     
-    system_prompt = get_system_prompt('generate_novel_system')
+    system_prompt = get_system_prompt(system_name)
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": final_prompt}
     ]
     
-    response = call_deepseek_api(messages, temperature=0.7, max_tokens=4000)
+    response = call_deepseek_api(messages, temperature=temperature, max_tokens=4000)
     
     if response and 'choices' in response and len(response['choices']) > 0:
         return response['choices'][0]['message']['content']
@@ -140,25 +201,28 @@ def generate_novel_content(prompt, context, context_chapters):
     return "AI响应为空或格式不正确。"
 
 def classify_user_intent(user_input):
-    """判断用户输入是普通对话还是小说创作指令"""
+    """判断用户输入的具体意图类型"""
     system_prompt = get_system_prompt('classify_intent_system')
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_input}
     ]
     
-    response = call_deepseek_api(messages, temperature=0.1, max_tokens=10)
+    response = call_deepseek_api(messages, temperature=0.1, max_tokens=20)
     
     if response and 'choices' in response and len(response['choices']) > 0:
         intent = response['choices'][0]['message']['content'].strip().lower()
-        # 确保返回值是预期的两种之一
+        
+        # 返回具体的意图类型
         if 'chat' in intent:
             return 'chat'
-        elif 'novel' in intent or 'creation' in intent:
-            return 'novel_creation'
+        elif 'plot_design' in intent or 'design' in intent:
+            return 'plot_design'
+        elif 'novel_generation' in intent or 'generation' in intent:
+            return 'novel_generation'
     
-    # 默认认为是小说创作（保持向后兼容）
-    return 'novel_creation'
+    # 默认认为是小说生成
+    return 'novel_generation'
 
 def general_chat(user_input):
     """处理普通对话"""

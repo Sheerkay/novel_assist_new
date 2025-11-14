@@ -131,6 +131,36 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('已清除 localStorage 中的小说数据');
     }
 
+    // 剧情库 localStorage 管理
+    function savePlotContextToLocalStorage() {
+        try {
+            localStorage.setItem('novel_assist_plot_context', JSON.stringify(plotContextSummaries));
+            console.log('剧情库数据已保存到 localStorage');
+        } catch (e) {
+            console.error('保存剧情库到 localStorage 失败:', e);
+        }
+    }
+
+    function loadPlotContextFromLocalStorage() {
+        try {
+            const savedData = localStorage.getItem('novel_assist_plot_context');
+            if (savedData) {
+                plotContextSummaries = JSON.parse(savedData);
+                console.log('从 localStorage 恢复剧情库数据:', plotContextSummaries.length, '项');
+                allElements.plotContextCount.textContent = plotContextSummaries.length;
+                return true;
+            }
+        } catch (e) {
+            console.error('从 localStorage 加载剧情库失败:', e);
+        }
+        return false;
+    }
+
+    function clearPlotContextFromLocalStorage() {
+        localStorage.removeItem('novel_assist_plot_context');
+        console.log('已清除 localStorage 中的剧情库数据');
+    }
+
     // =================================================================
     // 4. 核心函数 - 上下文与UI管理
     // =================================================================
@@ -331,10 +361,22 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.conversationHistory.appendChild(userBubble);
         allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
 
+        // 创建AI消息包装器
+        const aiMessageWrapper = document.createElement('div');
+        aiMessageWrapper.className = 'ai-message-wrapper';
+        
         const aiBubble = document.createElement('div');
         aiBubble.className = 'bubble ai-bubble';
         aiBubble.innerHTML = `<div class="ai-content">正在为您生成剧情概括...</div><div class="ai-actions"></div>`;
-        allElements.conversationHistory.appendChild(aiBubble);
+        
+        aiMessageWrapper.appendChild(aiBubble);
+        
+        // 创建AI气泡的按钮容器
+        const aiActions = document.createElement('div');
+        aiActions.className = 'ai-bubble-actions';
+        aiMessageWrapper.appendChild(aiActions);
+        
+        allElements.conversationHistory.appendChild(aiMessageWrapper);
 
         // 3. 准备并发送API请求
         const requestBody = {
@@ -371,8 +413,15 @@ document.addEventListener('DOMContentLoaded', function() {
             aiBubble._rawContent = result.summary; // 保存原始文本，用于"存为剧情"
             aiBubble._relatedChapters = selectedChapters; // 关联章节
 
-            const actionsDiv = aiBubble.querySelector('.ai-actions');
-            actionsDiv.innerHTML = `<button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>`;
+            const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
+            actionsDiv.innerHTML = `
+                <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋 复制</button>
+            `;
+            
+            const internalActionsDiv = aiBubble.querySelector('.ai-actions');
+            internalActionsDiv.innerHTML = `
+                <button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>
+            `;
             
             allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
             appendQuickCommandButton(); // AI响应完成后添加快捷指令按钮
@@ -413,6 +462,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const contextString = contextParts.join('\n\n---\n\n');
         
+        // 创建用户消息容器
+        const userMessageWrapper = document.createElement('div');
+        userMessageWrapper.className = 'user-message-wrapper';
+        
+        // 创建用户气泡
         const userBubble = document.createElement('div');
         userBubble.className = 'bubble user-bubble';
         // 将换行符转换为 <br> 标签，并转义 HTML 特殊字符
@@ -421,16 +475,38 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/\n/g, '<br>');
-        userBubble.innerHTML = `<p>${escapedPrompt}</p>`;
-        allElements.conversationHistory.appendChild(userBubble);
+        userBubble.innerHTML = `<div class="bubble-content">${escapedPrompt}</div>`;
+        
+        // 创建按钮容器
+        const userActions = document.createElement('div');
+        userActions.className = 'user-bubble-actions';
+        userActions.innerHTML = `<button class="copy-btn-subtle" onclick="copyUserMessage(this)" title="复制">📋 复制</button>`;
+        
+        // 将气泡和按钮添加到容器
+        userMessageWrapper.appendChild(userBubble);
+        userMessageWrapper.appendChild(userActions);
+        
+        allElements.conversationHistory.appendChild(userMessageWrapper);
         allElements.promptInput.value = '';
         allElements.promptInput.style.height = 'auto';
         allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
 
+        // 创建AI消息包装器
+        const aiMessageWrapper = document.createElement('div');
+        aiMessageWrapper.className = 'ai-message-wrapper';
+        
         const aiBubble = document.createElement('div');
         aiBubble.className = 'bubble ai-bubble';
         aiBubble.innerHTML = `<div class="ai-content">思考中...</div><div class="ai-actions"></div>`;
-        allElements.conversationHistory.appendChild(aiBubble);
+        
+        aiMessageWrapper.appendChild(aiBubble);
+        
+        // 创建AI气泡的按钮容器
+        const aiActions = document.createElement('div');
+        aiActions.className = 'ai-bubble-actions';
+        aiMessageWrapper.appendChild(aiActions);
+        
+        allElements.conversationHistory.appendChild(aiMessageWrapper);
 
         const requestBody = { 
             prompt: userPrompt, 
@@ -455,13 +531,18 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 判断是否为普通对话
             if (result.is_chat) {
-                // 普通对话：只显示内容，不添加操作按钮，不影响小说编辑状态
+                // 普通对话：只显示内容和复制按钮
                 aiContentDiv.innerHTML = marked.parse(result.content);
                 aiBubble._rawContent = result.content;
                 
-                // 普通对话不添加操作按钮
-                const actionsDiv = aiBubble.querySelector('.ai-actions');
-                actionsDiv.remove(); // 移除操作按钮区域
+                // 复制按钮放在气泡外的左下方
+                const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
+                actionsDiv.innerHTML = `
+                    <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋 复制</button>
+                `;
+                
+                // 清空内部actions区域
+                aiBubble.querySelector('.ai-actions').innerHTML = '';
                 
                 allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
                 appendQuickCommandButton(); // AI响应完成后添加快捷指令按钮
@@ -481,9 +562,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentNovel.chapters = result.chapters;
             }
             
-            const actionsDiv = aiBubble.querySelector('.ai-actions');
+            // 复制按钮放在气泡外的左下方
+            const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
             actionsDiv.innerHTML = `
-                <button class="btn btn-sm" onclick="copyToClipboard(this)">复制</button>
+                <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋 复制</button>
+            `;
+            
+            // 其他操作按钮保留在气泡内
+            const internalActionsDiv = aiBubble.querySelector('.ai-actions');
+            internalActionsDiv.innerHTML = `
                 <button class="btn btn-sm btn-success" onclick="saveAsDraft(this)">存为定稿</button>
                 <button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>
             `;
@@ -515,11 +602,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     relatedChapters: aiBubble._relatedChapters || [],
                 });
             });
+            savePlotContextToLocalStorage(); // 保存到 localStorage
             alert(`已成功解析并保存 ${parsedSummaries.length} 个新剧情到剧情库！`);
         } else {
             alert("未能从AI回复中解析出有效的剧情梗概。");
         }
         allElements.plotContextCount.textContent = plotContextSummaries.length;
+    }
+    
+    window.saveAsDraft = function(button) {
+        const aiBubble = button.closest('.ai-bubble');
+        const rawContent = aiBubble._rawContent;
+        if (!rawContent) return alert("错误：找不到原始AI回复内容。");
+        
+        const title = prompt('请输入定稿标题：', `剧情定稿 ${myDrafts.length + 1}`);
+        if (!title) return; // 用户取消
+        
+        myDrafts.push({
+            id: Date.now(),
+            title: title,
+            content: rawContent,
+            createdAt: new Date().toLocaleString()
+        });
+        
+        allElements.draftsCountSpan.textContent = myDrafts.length;
+        alert(`已保存为定稿：${title}`);
     }
     
     function updateCurrentChapterPlotPreview() {
@@ -732,6 +839,7 @@ document.addEventListener('DOMContentLoaded', function() {
             currentNovel = { file_id: result.file_id, filename: result.filename, chapters: result.chapters };
             // 重置上下文
             plotContextSummaries = [];
+            clearPlotContextFromLocalStorage(); // 清除剧情库 localStorage
             summariesForPreview = [];
             chaptersForPreview = []; // 清空，等待用户选择
             
@@ -813,7 +921,7 @@ document.addEventListener('DOMContentLoaded', function() {
         closeModal(allElements.plotContextModal);
     });
 
-    // 新增：为“添加到当前原文剧情”按钮添加事件监听
+    // 新增：为"添加到当前原文剧情"按钮添加事件监听
     allElements.addSelectedPlotsToCurrentChapterPlotBtn.addEventListener('click', () => {
         const selectedCheckboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox:checked');
         if (selectedCheckboxes.length === 0) {
@@ -825,7 +933,41 @@ document.addEventListener('DOMContentLoaded', function() {
         currentChapterPlotForPreview = plotContextSummaries.filter(summary => selectedIds.includes(String(summary.id)));
 
         updateCurrentChapterPlotPreview();
+        
+        // 自动勾选"当前原文章节剧情"复选框
+        if (currentChapterPlotForPreview.length > 0) {
+            allElements.masterCheckboxCurrentChapterPlot.checked = true;
+            allElements.masterCheckboxCurrentChapterPlot.disabled = false;
+            // 触发change事件以更新上下文摘要
+            updateSelectedContextSummary();
+        }
+        
         closeModal(allElements.plotContextModal);
+    });
+
+    // 新增：清空剧情库按钮事件监听
+    document.getElementById('clearPlotLibraryBtn').addEventListener('click', () => {
+        if (plotContextSummaries.length === 0) {
+            alert('剧情库已经是空的了！');
+            return;
+        }
+        
+        const confirmClear = confirm(`确定要清空剧情库吗？\n\n这将删除所有 ${plotContextSummaries.length} 条已保存的剧情，此操作不可撤销！`);
+        if (confirmClear) {
+            // 清空内存中的数据
+            plotContextSummaries = [];
+            summariesForPreview = [];
+            
+            // 清空 localStorage
+            clearPlotContextFromLocalStorage();
+            
+            // 更新UI
+            renderContextPreviewArea();
+            renderPlotContextModal();
+            allElements.plotContextCount.textContent = plotContextSummaries.length;
+            
+            alert('剧情库已清空！');
+        }
     });
 
     function renderDraftsList() {
@@ -849,11 +991,33 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     allElements.closeDraftsModalBtn.addEventListener('click', () => closeModal(allElements.viewDraftsModal));
 
-    window.copyToClipboard = function(button) { const content = button.closest('.ai-bubble').querySelector('.ai-content').innerText; navigator.clipboard.writeText(content).then(() => { alert('内容已复制到剪贴板！'); }, () => { alert('复制失败！'); }); }
+    window.copyToClipboard = function(button) { 
+        // 现在按钮在 ai-message-wrapper 内，需要找到同级的 ai-bubble
+        const wrapper = button.closest('.ai-message-wrapper');
+        const content = wrapper.querySelector('.ai-content').innerText; 
+        navigator.clipboard.writeText(content).then(() => { 
+            alert('内容已复制到剪贴板！'); 
+        }, () => { 
+            alert('复制失败！'); 
+        }); 
+    }
+    
+    window.copyUserMessage = function(button) { 
+        const wrapper = button.closest('.user-message-wrapper');
+        const content = wrapper.querySelector('.bubble-content').innerText; 
+        navigator.clipboard.writeText(content).then(() => { 
+            alert('内容已复制到剪贴板！'); 
+        }, () => { 
+            alert('复制失败！'); 
+        }); 
+    }
     
     // =================================================================
     // 6. 初始化
     // =================================================================
+    
+    // 尝试从 localStorage 恢复剧情库
+    loadPlotContextFromLocalStorage();
     
     // 尝试从 localStorage 恢复上次加载的小说
     const hasRestoredNovel = loadNovelFromLocalStorage();
