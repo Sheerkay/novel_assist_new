@@ -118,25 +118,48 @@ def generate_with_analysis():
     prompt = data.get('prompt')
     context_string = data.get('context_string', '') 
     
-    if not prompt: return jsonify({'error': '需要输入提示词'}), 400
+    # 记录请求信息
+    log_request('/api/generate-with-analysis', {
+        'prompt_length': len(prompt) if prompt else 0,
+        'context_length': len(context_string),
+        'has_file_id': bool(data.get('file_id'))
+    })
+    
+    api_logger.info(f'📝 收到生成请求')
+    api_logger.info(f'📄 提示词长度: {len(prompt) if prompt else 0} 字符')
+    api_logger.info(f'📦 上下文长度: {len(context_string)} 字符')
+    api_logger.info(f'💬 提示词前100字: {prompt[:100] if prompt else "无"}...')
+    
+    if not prompt: 
+        api_logger.error('❌ 错误: 没有提供提示词')
+        return jsonify({'error': '需要输入提示词'}), 400
 
     # 先判断用户意图
+    api_logger.info('🤔 正在分析用户意图...')
     intent = ai_service.classify_user_intent(prompt)
+    api_logger.info(f'✅ 意图识别结果: {intent}')
     
     # 如果是普通对话，直接返回对话内容
     if intent == 'chat':
+        api_logger.info('💬 识别为普通对话，调用闲聊功能')
         chat_response = ai_service.general_chat(prompt)
+        api_logger.info(f'✅ 对话生成完成，长度: {len(chat_response)} 字符')
+        log_response('/api/generate-with-analysis', 200, {'is_chat': True, 'response_length': len(chat_response)})
         return jsonify({
             'content': chat_response,
             'is_chat': True  # 标记这是普通对话
         }), 200
 
     # 创建上下文管理器并设置上下文
+    api_logger.info(f'📚 创建上下文管理器 (意图: {intent})')
     context_manager = ContextManager()
     context_manager.set_additional_context(context_string, [])
+    api_logger.info(f'📝 上下文设置完成')
     
     # 根据不同的创作意图使用上下文管理器生成内容
+    api_logger.info(f'🤖 开始生成内容 (意图: {intent})')
     content = ai_service.generate_content_with_intent(intent, prompt, context_manager)
+    api_logger.info(f'✅ 内容生成完成，长度: {len(content) if content else 0} 字符')
     
     if not content: return jsonify({'error': '内容生成失败'}), 500
     

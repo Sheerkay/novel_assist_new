@@ -1,0 +1,65 @@
+/* ====================
+   日志管理模式专用样式
+   ==================== */
+
+.main-content {
+    padding: 0;
+}
+
+.logs-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--header-height));
+    padding: 20px;
+}
+
+.logs-header {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.logs-header h2 {
+    margin: 0 0 15px 0;
+    color: var(--dark-color);
+}
+
+.logs-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.form-select {
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 0.9rem;
+    min-width: 150px;
+}
+
+.logs-content {
+    flex: 1;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    overflow: hidden;
+}
+
+.logs-viewer {
+    height: 100%;
+    overflow: auto;
+    padding: 15px;
+}
+
+.logs-viewer pre {
+    margin: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #333;
+}

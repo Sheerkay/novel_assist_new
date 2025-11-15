@@ -39,9 +39,10 @@ def create_app():
 
     with app.app_context():
         # 注册蓝图
-        from .api import novel_routes, generation_routes
+        from .api import novel_routes, generation_routes, log_routes
         app.register_blueprint(novel_routes.bp)
         app.register_blueprint(generation_routes.bp)
+        app.register_blueprint(log_routes.log_routes)
 
         # 服务前端的路由
         @app.route('/')

@@ -141,6 +141,9 @@ def generate_content_with_intent(intent, user_prompt, context_manager):
     
     config = intent_config.get(intent, intent_config['default'])
     
+    # 记录使用的配置
+    ai_logger.info(f'🎯 使用配置: 意图={intent}, 模板={config["template"]}, 系统提示={config["system"]}, 温度={config["temperature"]}')
+    
     # 使用上下文管理器构建消息
     messages = context_manager.build_messages(
         intent=intent,
@@ -149,10 +152,42 @@ def generate_content_with_intent(intent, user_prompt, context_manager):
         template_name=config['template']
     )
     
+    # 记录构建的消息
+    ai_logger.info(f'📨 构建了 {len(messages)} 条消息')
+    for i, msg in enumerate(messages):
+        role = msg.get('role', 'unknown')
+        content_preview = msg.get('content', '')[:200]
+        ai_logger.info(f'  消息{i+1} [{role}]: {content_preview}...')
+    
+    # 记录AI调用
+    full_prompt = '\n\n'.join([f"[{msg['role']}]\n{msg['content']}" for msg in messages])
+    log_ai_call(
+        prompt_type=f'内容生成-{intent}',
+        prompt=full_prompt
+    )
+    
+    ai_logger.info(f'🚀 调用DeepSeek API (温度={config["temperature"]}, 最大tokens=4000)')
     response = call_deepseek_api(messages, temperature=config['temperature'], max_tokens=4000)
     
     if response and 'choices' in response and len(response['choices']) > 0:
-        return response['choices'][0]['message']['content']
+        result = response['choices'][0]['message']['content']
+        ai_logger.info(f'✅ API调用成功，返回内容长度: {len(result)} 字符')
+        
+        # 记录响应
+        log_ai_call(
+            prompt_type=f'内容生成-{intent}',
+            prompt='',
+            response=result
+        )
+        
+        return result
+    
+    ai_logger.error('❌ API调用失败或返回为空')
+    log_ai_call(
+        prompt_type=f'内容生成-{intent}',
+        prompt='',
+        error='API响应为空或格式不正确'
+    )
     
     return "AI响应为空或格式不正确。"
 
@@ -208,20 +243,28 @@ def classify_user_intent(user_input):
         {"role": "user", "content": user_input}
     ]
     
+    ai_logger.info(f'🔍 开始分类用户意图，输入长度: {len(user_input)} 字符')
+    ai_logger.info(f'📝 输入前100字: {user_input[:100]}...')
+    
     response = call_deepseek_api(messages, temperature=0.1, max_tokens=20)
     
     if response and 'choices' in response and len(response['choices']) > 0:
         intent = response['choices'][0]['message']['content'].strip().lower()
+        ai_logger.info(f'🎯 意图分类原始结果: "{intent}"')
         
         # 返回具体的意图类型
         if 'chat' in intent:
+            ai_logger.info('💬 判定为: 普通对话')
             return 'chat'
         elif 'plot_design' in intent or 'design' in intent:
+            ai_logger.info('📝 判定为: 剧情设计')
             return 'plot_design'
         elif 'novel_generation' in intent or 'generation' in intent:
+            ai_logger.info('✍️ 判定为: 小说生成')
             return 'novel_generation'
     
     # 默认认为是小说生成
+    ai_logger.warning('⚠️ 无法明确判定意图，默认为: 小说生成')
     return 'novel_generation'
 
 def general_chat(user_input):

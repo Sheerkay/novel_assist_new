@@ -1,0 +1,297 @@
+/* ====================
+   通用样式 - 所有页面共用
+   ==================== */
+:root {
+    --primary-color: #4a6baf;
+    --secondary-color: #6d8bd7;
+    --accent-color: #ff7e5f;
+    --light-color: #f5f7fa;
+    --dark-color: #2c3e50;
+    --success-color: #2ecc71;
+    --warning-color: #f39c12;
+    --error-color: #e74c3c;
+    --plot-color: #9b59b6; 
+    --sidebar-width: 240px;
+    --header-height: 60px;
+    --content-max-width: 1100px; 
+}
+
+* { 
+    margin: 0; 
+    padding: 0; 
+    box-sizing: border-box; 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+}
+
+html, body { 
+    height: 100%; 
+    background-color: var(--light-color); 
+    overflow: hidden; 
+}
+
+.app-container { 
+    display: grid; 
+    grid-template-rows: var(--header-height) 1fr; 
+    height: 100vh; 
+}
+
+/* ====================
+   头部导航栏
+   ==================== */
+header { 
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)); 
+    color: white; 
+    padding: 0 20px; 
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+    z-index: 1000; 
+    display: flex; 
+    align-items: center; 
+    position: sticky; 
+    top: 0; 
+}
+
+.header-content { 
+    display: flex; 
+    align-items: center; 
+}
+
+.logo { 
+    font-size: 1.4rem; 
+    font-weight: bold; 
+}
+
+.sidebar-toggle-btn { 
+    background-color: rgba(255, 255, 255, 0.1); 
+    border: 1px solid rgba(255, 255, 255, 0.2); 
+    color: white; 
+    cursor: pointer; 
+    margin-right: 20px; 
+    width: 40px; 
+    height: 40px; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    transition: background-color 0.2s ease-in-out; 
+}
+
+.sidebar-toggle-btn:hover { 
+    background-color: rgba(255, 255, 255, 0.25); 
+}
+
+.sidebar-toggle-btn svg { 
+    width: 22px; 
+    height: 22px; 
+}
+
+/* ====================
+   页面主体布局
+   ==================== */
+.page-body { 
+    display: grid; 
+    grid-template-columns: var(--sidebar-width) 1fr; 
+    transition: grid-template-columns 0.3s ease-in-out; 
+    overflow: hidden; 
+}
+
+.page-body.sidebar-collapsed { 
+    grid-template-columns: 0 1fr; 
+}
+
+.page-body.sidebar-collapsed .app-sidebar { 
+    width: 0; 
+    min-width: 0; 
+    padding: 0; 
+    overflow: hidden; 
+    border-right: none; 
+    opacity: 0; 
+    pointer-events: none; 
+}
+
+.page-body:not(.sidebar-collapsed) .app-sidebar { 
+    width: var(--sidebar-width); 
+    opacity: 1; 
+    pointer-events: auto; 
+}
+
+/* ====================
+   侧边栏导航
+   ==================== */
+.app-sidebar { 
+    background-color: #ffffff; 
+    border-right: 1px solid #e8e8e8; 
+    padding: 20px 0; 
+    transition: all 0.3s ease-in-out; 
+    overflow-y: auto; 
+}
+
+.sidebar-menu { 
+    list-style: none; 
+}
+
+.sidebar-menu-item { 
+    margin-bottom: 5px; 
+}
+
+.sidebar-menu-item a { 
+    display: flex; 
+    align-items: center; 
+    padding: 12px 20px; 
+    color: var(--dark-color); 
+    text-decoration: none; 
+    transition: background-color 0.2s, color 0.2s; 
+    border-left: 3px solid transparent; 
+}
+
+.sidebar-menu-item a:hover { 
+    background-color: #f0f5ff; 
+    color: var(--primary-color); 
+}
+
+.sidebar-menu-item.active a { 
+    background-color: #e6eeff; 
+    color: var(--primary-color); 
+    border-left-color: var(--primary-color); 
+    font-weight: bold; 
+}
+
+.sidebar-menu-item .icon { 
+    width: 20px; 
+    height: 20px; 
+    margin-right: 12px; 
+}
+
+/* ====================
+   主内容区域
+   ==================== */
+main.main-content { 
+    grid-column: 2; 
+    height: 100%; 
+    overflow-y: auto; 
+}
+
+/* ====================
+   通用按钮样式
+   ==================== */
+.btn {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+/* ====================
+   通用模态框样式
+   ==================== */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 90%;
+    max-height: 90%;
+    overflow-y: auto;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e8e8e8;
+}
+
+.modal-header h2 {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: #888;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.close-modal-btn:hover {
+    color: var(--error-color);
+}
+
+/* ====================
+   占位页面样式
+   ==================== */
+.placeholder-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+    text-align: center;
+}
+
+.placeholder-page h2 {
+    color: var(--primary-color);
+    font-size: 2rem;
+    margin-bottom: 20px;
+}
+
+.placeholder-page p {
+    color: #666;
+    font-size: 1.1rem;
+    line-height: 1.6;
+}
+
+/* ====================
+   隐藏类
+   ==================== */
+.hidden {
+    display: none !important;
+}

@@ -1,0 +1,24 @@
+/* ====================
+   创作小说模式专用样式
+   ==================== */
+
+.main-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.placeholder-icon {
+    width: 100px;
+    height: 100px;
+    color: var(--primary-color);
+    opacity: 0.6;
+    margin-bottom: 20px;
+}
+
+.sub-text {
+    color: #888 !important;
+    margin-top: 20px;
+    font-style: italic;
+}

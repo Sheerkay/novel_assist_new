@@ -64,19 +64,6 @@ document.addEventListener('DOMContentLoaded', function() {
         currentChapterPlotPreviewCount: document.getElementById('current-chapter-plot-preview-count'),
         additionalContextModal: document.getElementById('additionalContextModal'),
         closeContextModalBtn: document.getElementById('closeContextModalBtn'),
-        editModeContainer: document.getElementById('editModeContainer'),
-        createModeContainer: document.getElementById('createModeContainer'),
-        historyModeContainer: document.getElementById('historyModeContainer'),
-        logsModeContainer: document.getElementById('logsModeContainer'),
-        floatingActionBar: document.getElementById('floatingActionBar'),
-        historyList: document.getElementById('historyList'),
-        historyDetail: document.getElementById('historyDetail'),
-        clearHistoryBtn: document.getElementById('clearHistoryBtn'),
-        logTypeSelect: document.getElementById('logTypeSelect'),
-        refreshLogsBtn: document.getElementById('refreshLogsBtn'),
-        clearLogsBtn: document.getElementById('clearLogsBtn'),
-        downloadLogsBtn: document.getElementById('downloadLogsBtn'),
-        logsText: document.getElementById('logsText'),
     };
 
     // =================================================================
@@ -303,34 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return chapters;
     }
 
-    function switchAppMode(mode) {
-        // 隐藏所有模式容器
-        allElements.editModeContainer.classList.add('hidden');
-        allElements.createModeContainer.classList.add('hidden');
-        allElements.historyModeContainer.classList.add('hidden');
-        allElements.logsModeContainer.classList.add('hidden');
-        
-        // 根据模式显示对应的容器
-        if (mode === 'edit') {
-            allElements.editModeContainer.classList.remove('hidden');
-            allElements.floatingActionBar.style.display = 'flex';
-        } else if (mode === 'create') {
-            allElements.createModeContainer.classList.remove('hidden');
-            allElements.floatingActionBar.style.display = 'none';
-        } else if (mode === 'history') {
-            allElements.historyModeContainer.classList.remove('hidden');
-            allElements.floatingActionBar.style.display = 'none';
-            loadHistoryList();
-        } else if (mode === 'logs') {
-            allElements.logsModeContainer.classList.remove('hidden');
-            allElements.floatingActionBar.style.display = 'none';
-            loadLogs();
-        }
-        
-        allElements.sidebarMenuItems.forEach(item => {
-            item.classList.toggle('active', item.dataset.mode === mode);
-        });
-    }
+
 
     function switchMainTab(tabName) {
         allElements.tabContents.forEach(content => {
@@ -656,8 +616,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // 5. 其他辅助函数和事件绑定
     // =================================================================
     
-    function openModal(modal) { modal.classList.add('show'); }
-    function closeModal(modal) { modal.classList.remove('show'); }
+    function openModal(modal) { modal.classList.add('active'); }
+    function closeModal(modal) { modal.classList.remove('active'); }
     
     function appendQuickCommandButton() {
         // 移除任何已存在的快捷指令按钮，防止重复
@@ -673,8 +633,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // 创建按钮
         const button = document.createElement('button');
         button.id = 'quick-generate-summary-btn';
-        button.className = 'btn btn-secondary';
+        button.className = 'btn';
         button.textContent = '概括选中章节';
+        // 应用自定义样式
+        button.style.cssText = 'background: linear-gradient(135deg, #4a6baf, #6d8bd7); color: white;';
         
         // 添加事件监听
         button.addEventListener('click', handleGenerateSummary);
@@ -685,7 +647,7 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
     }
 
-    document.querySelectorAll('.close-btn').forEach(btn => btn.addEventListener('click', (e) => closeModal(e.target.closest('.modal'))));
+    document.querySelectorAll('.close-modal-btn').forEach(btn => btn.addEventListener('click', (e) => closeModal(e.target.closest('.modal'))));
     window.addEventListener('click', (e) => { 
         if (e.target.classList.contains('modal')) closeModal(e.target);
     });
@@ -693,13 +655,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- 界面切换逻辑 ---
     allElements.sidebarToggleBtn.addEventListener('click', () => {
         allElements.pageBody.classList.toggle('sidebar-collapsed');
-    });
-
-    allElements.sidebarMenuItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-            e.preventDefault();
-            switchAppMode(item.dataset.mode);
-        });
     });
 
     allElements.mainTabs.forEach(tab => {
@@ -1019,138 +974,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // =================================================================
-    // 6. 历史对话管理
     // =================================================================
-    
-    let conversationHistory = [];
-    
-    function saveConversationToHistory() {
-        const messages = [];
-        const bubbles = allElements.conversationHistory.querySelectorAll('.bubble');
-        bubbles.forEach(bubble => {
-            const isUser = bubble.classList.contains('user-bubble');
-            messages.push({
-                type: isUser ? 'user' : 'ai',
-                content: bubble.textContent.trim()
-            });
-        });
-        
-        if (messages.length > 1) { // 至少有一次对话
-            const conversation = {
-                id: Date.now(),
-                title: messages[0].content.substring(0, 30) + '...',
-                date: new Date().toLocaleString('zh-CN'),
-                messages: messages
-            };
-            
-            conversationHistory.unshift(conversation);
-            localStorage.setItem('conversation_history', JSON.stringify(conversationHistory));
-        }
-    }
-    
-    function loadHistoryList() {
-        const saved = localStorage.getItem('conversation_history');
-        if (saved) {
-            conversationHistory = JSON.parse(saved);
-        }
-        
-        allElements.historyList.innerHTML = '';
-        
-        if (conversationHistory.length === 0) {
-            allElements.historyList.innerHTML = '<p style="text-align: center; color: #888; padding: 20px;">暂无历史对话</p>';
-            return;
-        }
-        
-        conversationHistory.forEach(conv => {
-            const item = document.createElement('div');
-            item.className = 'history-item';
-            item.innerHTML = `
-                <div class="history-item-title">${conv.title}</div>
-                <div class="history-item-date">${conv.date}</div>
-            `;
-            item.addEventListener('click', () => showHistoryDetail(conv));
-            allElements.historyList.appendChild(item);
-        });
-    }
-    
-    function showHistoryDetail(conversation) {
-        allElements.historyDetail.innerHTML = '';
-        
-        conversation.messages.forEach(msg => {
-            const bubble = document.createElement('div');
-            bubble.className = `bubble ${msg.type === 'user' ? 'user-bubble' : 'ai-bubble'}`;
-            bubble.textContent = msg.content;
-            allElements.historyDetail.appendChild(bubble);
-        });
-        
-        document.querySelectorAll('.history-item').forEach(item => item.classList.remove('active'));
-        event.currentTarget.classList.add('active');
-    }
-    
-    allElements.clearHistoryBtn.addEventListener('click', () => {
-        if (confirm('确定要清空所有历史对话吗？')) {
-            conversationHistory = [];
-            localStorage.removeItem('conversation_history');
-            loadHistoryList();
-            allElements.historyDetail.innerHTML = '<p style="text-align: center; color: #888; padding: 40px;">请从左侧选择对话记录查看详情</p>';
-        }
-    });
-    
-    // =================================================================
-    // 7. 日志管理
-    // =================================================================
-    
-    async function loadLogs() {
-        const logType = allElements.logTypeSelect.value;
-        allElements.logsText.textContent = '加载中...';
-        
-        try {
-            const response = await fetch(`/api/logs/${logType}`);
-            if (response.ok) {
-                const data = await response.json();
-                allElements.logsText.textContent = data.content || '暂无日志';
-            } else {
-                allElements.logsText.textContent = '加载日志失败';
-            }
-        } catch (error) {
-            allElements.logsText.textContent = `加载失败: ${error.message}`;
-        }
-    }
-    
-    allElements.refreshLogsBtn.addEventListener('click', loadLogs);
-    allElements.logTypeSelect.addEventListener('change', loadLogs);
-    
-    allElements.clearLogsBtn.addEventListener('click', async () => {
-        if (confirm('确定要清空当前日志吗？')) {
-            const logType = allElements.logTypeSelect.value;
-            try {
-                const response = await fetch(`/api/logs/${logType}`, { method: 'DELETE' });
-                if (response.ok) {
-                    alert('日志已清空');
-                    loadLogs();
-                } else {
-                    alert('清空日志失败');
-                }
-            } catch (error) {
-                alert(`清空失败: ${error.message}`);
-            }
-        }
-    });
-    
-    allElements.downloadLogsBtn.addEventListener('click', () => {
-        const logType = allElements.logTypeSelect.value;
-        const content = allElements.logsText.textContent;
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${logType}_log_${new Date().toISOString().slice(0, 10)}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-    });
-    
-    // =================================================================
-    // 8. 初始化
+    // 6. 初始化
     // =================================================================
     
     // 尝试从 localStorage 恢复剧情库
@@ -1170,10 +995,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     renderContextPreviewArea();
-    switchAppMode('edit'); // 默认进入编辑续写模式
     switchMainTab('plot-design'); // 默认显示剧情设计标签页
     appendQuickCommandButton(); // 初始加载时添加按钮
-    allElements.floatingActionBar.style.display = 'flex'; // 显示悬浮按钮
 
     // 加载持久化的标签
     loadContextLabels();
