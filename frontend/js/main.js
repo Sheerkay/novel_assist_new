@@ -264,36 +264,57 @@ document.addEventListener('DOMContentLoaded', function() {
         const chapters = [];
         if (!text || !text.trim()) return chapters;
 
-        // Regex to identify potential chapter titles. Covers:
-        // 1. Markdown headers (e.g., ## My Title)
-        // 2. Bracketed titles (e.g., 【My Title】)
-        // 3. Chinese chapter format (e.g., 第一章 My Title)
-        const titleRegex = /^(?:##+\s+.+|【.+】|第[一二三四五六七八九十零百千万\d]+[章节卷集篇].*)$/;
-        
+        const metaSectionKeywords = ['微调说明', '微调提示', '调整说明', '优化说明'];
         const lines = text.split('\n');
-        
-        // Find all title lines and their indices
+
+        const isPotentialChapterTitle = (line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return false;
+            if (/^#{1,6}\s+.+/.test(trimmed)) return true;
+            if (/^第[一二三四五六七八九十零百千万\d]+[章节卷集篇回].*/.test(trimmed)) return true;
+            if (/^【.+】$/.test(trimmed)) {
+                const inner = trimmed.slice(1, -1).trim();
+                if (!inner) return false;
+                return /[章节卷集篇回]/.test(inner);
+            }
+            return false;
+        };
+
         const titles = [];
         lines.forEach((line, index) => {
-            if (titleRegex.test(line.trim())) {
-                titles.push({ title: line.trim(), index: index });
+            if (isPotentialChapterTitle(line)) {
+                titles.push({ title: line.trim(), index });
             }
         });
 
         if (titles.length === 0) {
-            if (text.trim()) {
-                chapters.push({ title: "AI生成的剧情梗概", content: text.trim() });
+            const content = text.trim();
+            if (content) {
+                chapters.push({ title: 'AI生成的剧情梗概', content });
             }
             return chapters;
         }
 
-        // Create chapters from titles
         for (let i = 0; i < titles.length; i++) {
             const start = titles[i].index;
             const end = (i + 1 < titles.length) ? titles[i + 1].index : lines.length;
-            
-            const title = titles[i].title.replace(/##+\s*|【|】/g, '').replace(/-\s*剧情概括\s*$/, '').trim();
+            const rawSection = lines.slice(start, end).join('\n').trim();
             const content = lines.slice(start + 1, end).join('\n').trim();
+
+            let title = titles[i].title
+                .replace(/^#{1,6}\s*/, '')
+                .replace(/^【/, '')
+                .replace(/】$/, '')
+                .replace(/-\s*剧情概括\s*$/, '')
+                .trim();
+
+            const isMetaSection = metaSectionKeywords.some(keyword => title.includes(keyword));
+
+            if (isMetaSection && chapters.length > 0) {
+                const lastChapter = chapters[chapters.length - 1];
+                lastChapter.content += (lastChapter.content ? '\n\n' : '') + rawSection;
+                continue;
+            }
 
             if (title && content) {
                 chapters.push({ title, content });
@@ -388,7 +409,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 3. 准备并发送API请求
         const requestBody = {
-            chapters: selectedChapters,
+        if (!text || !text.trim()) return chapters; // Check if text is empty or only whitespace
             file_id: currentNovel ? currentNovel.file_id : null
         };
 

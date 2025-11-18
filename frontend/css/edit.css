@@ -136,6 +136,32 @@ main.main-content {
     font-size: 16px;
 }
 
+.system-bubble {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: auto;
+    max-width: 100%;
+    align-self: flex-start;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.system-bubble p {
+    margin: 0;
+    white-space: inherit;
+}
+
+.system-message-wrapper {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: auto;
+    max-width: 100%;
+    align-self: flex-start;
+}
+
 .bubble-content {
     display: block;
     margin-bottom: 0;
@@ -418,6 +444,7 @@ main.main-content {
 .modal-body {
     flex-grow: 1;
     overflow-y: auto;
+    min-height: 0;
 }
 
 .modal-footer {
@@ -430,18 +457,96 @@ main.main-content {
     align-items: center;
 }
 
+.plot-context-modal .modal-content,
+#plotContextModal .modal-content {
+    width: 95%;
+    max-width: 1100px;
+}
+
+#viewDraftsModal .modal-content {
+    width: 95%;
+    max-width: 1100px;
+}
+
+#viewDraftsModal .modal-body {
+    max-height: 75vh;
+}
+
+#plotContextModal .modal-body {
+    max-height: 75vh;
+}
+
 .modal-grid {
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: 20px;
     overflow: hidden;
     flex-grow: 1;
+    min-height: 0;
+    align-items: stretch;
+}
+
+.plot-library-grid {
+    grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.2fr) minmax(360px, 1.8fr);
+}
+
+.panel-header {
+    padding: 10px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.panel-subtitle {
+    font-size: 0.8rem;
+    color: #777;
+}
+
+.book-panel .list-container {
+    margin-top: 0;
+}
+
+.book-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.book-list li .book-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.book-list li .book-count {
+    font-size: 0.85rem;
+    color: #666;
+}
+
+.book-list li.placeholder {
+    cursor: default;
+}
+
+.chapter-panel-header {
+    padding: 10px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.chapter-panel-header button {
+    flex-shrink: 0;
 }
 
 .list-panel {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0;
 }
 
 .list-container {
@@ -450,6 +555,7 @@ main.main-content {
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     flex-grow: 1;
+    min-height: 0;
 }
 
 .list-container li {
@@ -476,8 +582,39 @@ main.main-content {
     line-height: 1.7;
 }
 
+.chapter-panel {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 10px;
+    min-height: 0;
+}
+
+.chapter-panel .list-container {
+    min-height: 0;
+}
+
+.modal-right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+#plotPreviewArea {
+    flex: 1;
+    overflow-y: auto;
+}
+
 .list-actions {
-    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 10px;
+}
+
+.list-actions button {
+    width: auto;
+    min-width: 110px;
+    font-size: 0.9rem;
 }
 
 /* 上下文选择区域 */
@@ -529,7 +666,7 @@ main.main-content {
     font-size: 0.8em;
     font-weight: normal;
     color: #777;
-    margin-left: auto;
+    margin-left: 8px;
     background-color: #e0e0e0;
     padding: 2px 6px;
     border-radius: 8px;
@@ -613,4 +750,30 @@ main.main-content {
     color: var(--success-color);
     margin-top: 10px;
     font-weight: bold;
+}
+
+/* 清空上下文按钮 */
+.btn-clear-context {
+    background: rgba(231, 76, 60, 0.1);
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    color: #e74c3c;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-clear-context:hover {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    transform: scale(1.05);
+}
+
+.btn-clear-context:active {
+    transform: scale(0.95);
 }

@@ -172,17 +172,34 @@
                 <h2>我的定稿</h2>
                 <span class="close-modal-btn">&times;</span>
             </div>
-            <div class="modal-body modal-grid">
-                <div class="list-panel">
-                    <ul id="draftsListContainer" class="list-container"></ul>
-                    <div class="list-actions"><button class="btn btn-secondary">合并下载</button></div>
+            <div class="modal-body modal-grid plot-library-grid">
+                <div class="list-panel book-panel">
+                    <div class="panel-header">
+                        <strong>书籍列表</strong>
+                        <span class="panel-subtitle">根据选中书籍查看定稿章节</span>
+                    </div>
+                    <ul id="draftsBookList" class="list-container book-list">
+                        <li class="placeholder">暂无定稿，请先保存。</li>
+                    </ul>
                 </div>
-                <div id="draftsPreviewArea" class="preview-area">
-                    <h3>请从左侧选择章节以预览</h3>
-                    <p style="color: #666;">...</p>
+                <div class="list-panel chapter-panel">
+                    <div class="chapter-panel-header">
+                        <button class="btn btn-secondary btn-sm" id="selectAllDraftsButton">全选</button>
+                    </div>
+                    <ul id="draftsListContainer" class="list-container"></ul>
+                    <div class="list-actions">
+                        <button class="btn btn-secondary btn-sm" id="clearDraftSelectionsBtn">清空勾选</button>
+                    </div>
+                </div>
+                <div class="modal-right">
+                    <div id="draftsPreviewArea" class="preview-area">
+                        <h3>请从左侧选择章节以预览</h3>
+                        <p style="color: #666;">...</p>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="btn" id="mergeDraftsBtn">合并下载</button>
                 <button class="btn btn-secondary" id="closeDraftsModalBtn">关闭</button>
             </div>
         </div>
@@ -195,12 +212,24 @@
                 <h2>已存剧情概览</h2>
                 <span class="close-modal-btn">&times;</span>
             </div>
-            <div class="modal-body modal-grid">
-                <div class="list-panel">
-                    <div style="padding: 10px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center;">
-                        <button class="btn btn-secondary btn-sm" id="selectAllPlotsButton">全选</button> 
+            <div class="modal-body modal-grid plot-library-grid">
+                <div class="list-panel book-panel">
+                    <div class="panel-header">
+                        <strong>书籍列表</strong>
+                        <span class="panel-subtitle">根据选中书籍查看剧情章节</span>
+                    </div>
+                    <ul id="plotBookList" class="list-container book-list">
+                        <li class="placeholder">暂无剧情，请先保存。</li>
+                    </ul>
+                </div>
+                <div class="list-panel chapter-panel">
+                    <div class="chapter-panel-header">
+                        <button class="btn btn-secondary btn-sm" id="selectAllPlotsButton">全选</button>
                     </div>
                     <ul id="plotListContainer" class="list-container"></ul>
+                    <div class="list-actions">
+                        <button id="clearPlotSelectionsBtn" class="btn btn-secondary btn-sm">清空勾选</button>
+                    </div>
                 </div>
                 <div class="modal-right">
                     <div id="plotPreviewArea">
@@ -210,9 +239,8 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="clearPlotLibraryBtn" class="btn btn-danger" style="margin-right: auto;">清空剧情库</button>
                 <button id="addSelectedPlotsBtn" class="btn">添加到梗概</button>
-                <button id="addSelectedPlotsToCurrentChapterPlotBtn" class="btn">添加到当前原文剧情</button>
+                <button id="addSelectedPlotsToCurrentChapterPlotBtn" class="btn">添加到当前原文章节剧情</button>
             </div>
         </div>
     </div>
@@ -231,6 +259,7 @@
                             <input type="checkbox" id="master-checkbox-chapters" class="master-checkbox" title="勾选以启用所有已选原文章节作为上下文" checked>
                             📚 <span id="chapters-label" contenteditable="true" title="点击可编辑标签">原文章节</span>
                             <span class="item-count" id="chapters-preview-count">0 项</span>
+                            <button class="btn-clear-context" id="clear-chapters-btn" title="清空所有原文章节">🗑️</button>
                         </summary>
                         <ul class="context-preview-list" id="chapters-preview-list">
                             <li class="placeholder">请通过右侧"加载小说"按钮选择章节。</li>
@@ -241,6 +270,7 @@
                             <input type="checkbox" id="master-checkbox-summaries" class="master-checkbox" title="勾选以启用所有已选剧情梗概作为上下文" checked>
                             💡 <span id="summaries-label" contenteditable="true" title="点击可编辑标签">剧情梗概</span>
                             <span class="item-count" id="summaries-preview-count">0 项</span>
+                            <button class="btn-clear-context" id="clear-summaries-btn" title="清空所有剧情梗概">🗑️</button>
                         </summary>
                         <ul class="context-preview-list" id="summaries-preview-list">
                             <li class="placeholder">请通过"剧情库"选择或"存为剧情"添加梗概。</li>
@@ -251,6 +281,7 @@
                             <input type="checkbox" id="master-checkbox-current-chapter-plot" class="master-checkbox" title="勾选以启用所有已选当前原文章节剧情作为上下文">
                             📝 <span id="current-chapter-plot-label" contenteditable="true" title="点击可编辑标签">当前原文章节剧情</span>
                             <span class="item-count" id="current-chapter-plot-preview-count">0 项</span>
+                            <button class="btn-clear-context" id="clear-current-plot-btn" title="清空所有当前原文剧情">🗑️</button>
                         </summary>
                         <ul class="context-preview-list" id="current-chapter-plot-preview-list">
                             <li class="placeholder">此区域用于存放从章节生成的临时剧情。</li>

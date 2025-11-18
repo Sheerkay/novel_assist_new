@@ -5,9 +5,76 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentNovel = null; 
     let plotContextSummaries = []; 
     let chaptersForPreview = [];
-    let summariesForPreview = [];
+    let summariesForPreview = []; 
     let myDrafts = [];
     let currentChapterPlotForPreview = []; // 新增：用于存放当前章节的剧情预览
+    const DEFAULT_PLOT_BOOK_KEY = 'global-default';
+    const DEFAULT_PLOT_BOOK_TITLE = '未分类剧情';
+    let selectedPlotBookId = DEFAULT_PLOT_BOOK_KEY;
+    let selectedDraftBookId = DEFAULT_PLOT_BOOK_KEY;
+    let draftSelectionState = new Set(); // 存储被勾选的定稿ID
+    let activeDraftId = null; // 当前预览的定稿ID
+
+    // 智能勾选上下文区域的函数
+    // mode: 'summary' - 概括章节（只勾选原文章节）
+    //       'plot-design' - 剧情设计（只勾选当前原文章节剧情）
+    //       'general' - 常规对话（勾选剧情梗概，保留其他）
+    function smartSelectContext(mode) {
+        let message = '';
+        
+        if (mode === 'summary') {
+            // 概括章节：只需要原文章节
+            allElements.masterCheckboxChapters.checked = chaptersForPreview.length > 0;
+            allElements.masterCheckboxSummaries.checked = false;
+            allElements.masterCheckboxCurrentChapterPlot.checked = false;
+            message = '智能选择：已自动勾选 "原文章节" 作为上下文';
+        } else if (mode === 'plot-design') {
+            // 剧情设计：只需要当前原文章节剧情
+            allElements.masterCheckboxChapters.checked = false;
+            allElements.masterCheckboxSummaries.checked = false;
+            allElements.masterCheckboxCurrentChapterPlot.checked = currentChapterPlotForPreview.length > 0;
+            message = '智能选择：已自动勾选 "当前原文章节剧情" 作为上下文';
+        } else if (mode === 'general') {
+            // 常规对话：主要使用剧情梗概，其他保持不变
+            if (summariesForPreview.length > 0) {
+                allElements.masterCheckboxSummaries.checked = true;
+            }
+            message = '智能选择：已自动勾选 "剧情梗概" 作为上下文';
+            // 保持原文章节和当前剧情的勾选状态不变
+        }
+        
+        // 更新底部的上下文摘要显示
+        updateSelectedContextSummary();
+        
+        // 显示系统提示气泡
+        if (message && allElements.conversationHistory) {
+            const systemWrapper = document.createElement('div');
+            systemWrapper.className = 'system-message-wrapper';
+            
+            const systemBubble = document.createElement('div');
+            systemBubble.className = 'bubble ai-bubble system-bubble';
+            systemBubble.style.backgroundColor = '#e8f5e9';
+            systemBubble.style.borderLeft = '4px solid #4caf50';
+            systemBubble.innerHTML = `<p style="margin:0;"><strong>[系统]</strong> ${message}</p>`;
+            
+            systemWrapper.appendChild(systemBubble);
+            allElements.conversationHistory.appendChild(systemWrapper);
+            allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+        }
+    }
+
+    // 检测用户输入是否为剧情设计类需求
+    function isPlotDesignIntent(text) {
+        const plotKeywords = [
+            '剧情', '情节', '故事线', '主线', '支线',
+            '设计', '改写', '优化', '调整', '修改',
+            '冲突', '转折', '高潮', '伏笔', '铺垫',
+            '人物关系', '角色发展', '矛盾', '悬念'
+        ];
+        
+        const lowerText = text.toLowerCase();
+        return plotKeywords.some(keyword => lowerText.includes(keyword));
+    }
 
     // =================================================================
     // 2. DOM元素引用
@@ -48,12 +115,18 @@ document.addEventListener('DOMContentLoaded', function() {
         changeNovelBtn: document.getElementById('changeNovelBtn'),
 
         plotListContainer: document.getElementById('plotListContainer'),
-    plotPreviewArea: document.getElementById('plotPreviewArea'),
+        plotPreviewArea: document.getElementById('plotPreviewArea'),
+        plotBookList: document.getElementById('plotBookList'),
+        clearPlotSelectionsBtn: document.getElementById('clearPlotSelectionsBtn'),
         selectAllPlotsButton: document.getElementById('selectAllPlotsButton'),
         addSelectedPlotsBtn: document.getElementById('addSelectedPlotsBtn'),
         addSelectedPlotsToCurrentChapterPlotBtn: document.getElementById('addSelectedPlotsToCurrentChapterPlotBtn'), // 新增按钮引用
         draftsListContainer: document.getElementById('draftsListContainer'),
         draftsPreviewArea: document.getElementById('draftsPreviewArea'),
+        draftsBookList: document.getElementById('draftsBookList'),
+        selectAllDraftsButton: document.getElementById('selectAllDraftsButton'),
+        clearDraftSelectionsBtn: document.getElementById('clearDraftSelectionsBtn'),
+        mergeDraftsBtn: document.getElementById('mergeDraftsBtn'),
         closeDraftsModalBtn: document.getElementById('closeDraftsModalBtn'),
         selectedContextToggle: document.getElementById('selected-context-toggle'),
         chaptersLabel: document.getElementById('chapters-label'),
@@ -64,6 +137,9 @@ document.addEventListener('DOMContentLoaded', function() {
         currentChapterPlotPreviewCount: document.getElementById('current-chapter-plot-preview-count'),
         additionalContextModal: document.getElementById('additionalContextModal'),
         closeContextModalBtn: document.getElementById('closeContextModalBtn'),
+        clearChaptersBtn: document.getElementById('clear-chapters-btn'),
+        clearSummariesBtn: document.getElementById('clear-summaries-btn'),
+        clearCurrentPlotBtn: document.getElementById('clear-current-plot-btn'),
     };
 
     // =================================================================
@@ -116,6 +192,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (savedData) {
                 const parsed = JSON.parse(savedData);
                 currentNovel = parsed.novel;
+                selectedPlotBookId = getPlotBookKeyFromNovel(currentNovel);
+                selectedDraftBookId = selectedPlotBookId;
                 chaptersForPreview = parsed.selectedChapters || [];
                 console.log('从 localStorage 恢复小说数据:', currentNovel.filename);
                 return true;
@@ -134,7 +212,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // 剧情库 localStorage 管理
     function savePlotContextToLocalStorage() {
         try {
-            localStorage.setItem('novel_assist_plot_context', JSON.stringify(plotContextSummaries));
+            if (plotContextSummaries.length === 0) {
+                localStorage.removeItem('novel_assist_plot_context');
+            } else {
+                localStorage.setItem('novel_assist_plot_context', JSON.stringify(plotContextSummaries));
+            }
             console.log('剧情库数据已保存到 localStorage');
         } catch (e) {
             console.error('保存剧情库到 localStorage 失败:', e);
@@ -145,7 +227,8 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const savedData = localStorage.getItem('novel_assist_plot_context');
             if (savedData) {
-                plotContextSummaries = JSON.parse(savedData);
+                plotContextSummaries = JSON.parse(savedData).map(normalizePlotEntry);
+                ensureSelectedPlotBookExists();
                 console.log('从 localStorage 恢复剧情库数据:', plotContextSummaries.length, '项');
                 allElements.plotContextCount.textContent = plotContextSummaries.length;
                 return true;
@@ -156,9 +239,90 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
     }
 
-    function clearPlotContextFromLocalStorage() {
-        localStorage.removeItem('novel_assist_plot_context');
-        console.log('已清除 localStorage 中的剧情库数据');
+    function normalizePlotEntry(entry) {
+        return {
+            ...entry,
+            bookId: entry.bookId || DEFAULT_PLOT_BOOK_KEY,
+            bookTitle: entry.bookTitle || DEFAULT_PLOT_BOOK_TITLE,
+        };
+    }
+
+    function getPlotBookKeyFromNovel(novel) {
+        if (!novel) return DEFAULT_PLOT_BOOK_KEY;
+        if (novel.file_id) return `file_${novel.file_id}`;
+        if (novel.filename) return `name_${novel.filename}`;
+        return DEFAULT_PLOT_BOOK_KEY;
+    }
+
+    function getPlotBookTitleFromNovel(novel) {
+        if (!novel) return DEFAULT_PLOT_BOOK_TITLE;
+        return novel.filename || novel.title || DEFAULT_PLOT_BOOK_TITLE;
+    }
+
+    function getPlotsByBook(bookId) {
+        const key = bookId || DEFAULT_PLOT_BOOK_KEY;
+        return plotContextSummaries.filter(item => (item.bookId || DEFAULT_PLOT_BOOK_KEY) === key);
+    }
+
+    function getPlotBooks() {
+        const bookMap = new Map();
+        plotContextSummaries.forEach(entry => {
+            const key = entry.bookId || DEFAULT_PLOT_BOOK_KEY;
+            if (!bookMap.has(key)) {
+                bookMap.set(key, {
+                    id: key,
+                    title: entry.bookTitle || DEFAULT_PLOT_BOOK_TITLE,
+                    count: 0
+                });
+            }
+            bookMap.get(key).count += 1;
+        });
+        return Array.from(bookMap.values()).sort((a, b) => a.title.localeCompare(b.title, 'zh'));
+    }
+
+    function ensureSelectedPlotBookExists() {
+        const books = getPlotBooks();
+        if (books.length === 0) {
+            selectedPlotBookId = DEFAULT_PLOT_BOOK_KEY;
+            return;
+        }
+        const novelKey = currentNovel ? getPlotBookKeyFromNovel(currentNovel) : null;
+        if (novelKey && books.some(book => book.id === novelKey)) {
+            selectedPlotBookId = novelKey;
+            return;
+        }
+        if (!books.some(book => book.id === selectedPlotBookId)) {
+            selectedPlotBookId = books[0].id;
+        }
+    }
+
+    function getBookTitleById(bookId) {
+        const key = bookId || DEFAULT_PLOT_BOOK_KEY;
+        const hit = plotContextSummaries.find(item => (item.bookId || DEFAULT_PLOT_BOOK_KEY) === key);
+        if (hit) return hit.bookTitle || DEFAULT_PLOT_BOOK_TITLE;
+        if (currentNovel && getPlotBookKeyFromNovel(currentNovel) === key) {
+            return getPlotBookTitleFromNovel(currentNovel);
+        }
+        return DEFAULT_PLOT_BOOK_TITLE;
+    }
+
+    function getActivePlotBookInfo() {
+        if (currentNovel) {
+            return {
+                id: getPlotBookKeyFromNovel(currentNovel),
+                title: getPlotBookTitleFromNovel(currentNovel)
+            };
+        }
+        if (selectedPlotBookId && selectedPlotBookId !== DEFAULT_PLOT_BOOK_KEY) {
+            return {
+                id: selectedPlotBookId,
+                title: getBookTitleById(selectedPlotBookId)
+            };
+        }
+        return {
+            id: DEFAULT_PLOT_BOOK_KEY,
+            title: DEFAULT_PLOT_BOOK_TITLE
+        };
     }
 
     // =================================================================
@@ -195,6 +359,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         allElements.summariesPreviewCount.textContent = `${summariesForPreview.length} 项`;
         allElements.masterCheckboxSummaries.disabled = summariesForPreview.length === 0;
+
+        const currentPlotList = allElements.currentChapterPlotPreviewList;
+        currentPlotList.innerHTML = '';
+        if (currentChapterPlotForPreview.length > 0) {
+            currentChapterPlotForPreview.forEach(plot => {
+                const li = document.createElement('li');
+                li.textContent = plot.title;
+                li.title = plot.title;
+                currentPlotList.appendChild(li);
+            });
+        } else {
+            currentPlotList.innerHTML = '<li class="placeholder">此区域用于存放从章节生成的临时剧情。</li>';
+        }
+        allElements.currentChapterPlotPreviewCount.textContent = `${currentChapterPlotForPreview.length} 项`;
+        allElements.masterCheckboxCurrentChapterPlot.disabled = currentChapterPlotForPreview.length === 0;
+
         updateSelectedContextSummary();
     }
 
@@ -244,43 +424,64 @@ document.addEventListener('DOMContentLoaded', function() {
             totalCount += currentPlotCount;
         }
 
-        allElements.selectedContextToggle.textContent = `附加上下文详情 (1_${chaptersCount}项，2_${summariesCount}项，3_${currentPlotCount}项)`;
+        allElements.selectedContextToggle.textContent = `附加上下文详情 (原文${chaptersCount}项，剧情${summariesCount}项，当前${currentPlotCount}项)`;
     }
 
     function parseAiSummaryContent(text) {
         const chapters = [];
         if (!text || !text.trim()) return chapters;
 
-        // Regex to identify potential chapter titles. Covers:
-        // 1. Markdown headers (e.g., ## My Title)
-        // 2. Bracketed titles (e.g., 【My Title】)
-        // 3. Chinese chapter format (e.g., 第一章 My Title)
-        const titleRegex = /^(?:##+\s+.+|【.+】|第[一二三四五六七八九十零百千万\d]+[章节卷集篇].*)$/;
-        
+        const metaSectionKeywords = ['微调说明', '微调提示', '调整说明', '优化说明'];
         const lines = text.split('\n');
-        
-        // Find all title lines and their indices
+
+        const isPotentialChapterTitle = (line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return false;
+            if (/^#{1,6}\s+.+/.test(trimmed)) return true;
+            if (/^第[一二三四五六七八九十零百千万\d]+[章节卷集篇回].*/.test(trimmed)) return true;
+            if (/^【.+】$/.test(trimmed)) {
+                const inner = trimmed.slice(1, -1).trim();
+                if (!inner) return false;
+                return /[章节卷集篇回]/.test(inner);
+            }
+            return false;
+        };
+
         const titles = [];
         lines.forEach((line, index) => {
-            if (titleRegex.test(line.trim())) {
-                titles.push({ title: line.trim(), index: index });
+            if (isPotentialChapterTitle(line)) {
+                titles.push({ title: line.trim(), index });
             }
         });
 
         if (titles.length === 0) {
-            if (text.trim()) {
-                chapters.push({ title: "AI生成的剧情梗概", content: text.trim() });
+            const content = text.trim();
+            if (content) {
+                chapters.push({ title: 'AI生成的剧情梗概', content });
             }
             return chapters;
         }
 
-        // Create chapters from titles
         for (let i = 0; i < titles.length; i++) {
             const start = titles[i].index;
             const end = (i + 1 < titles.length) ? titles[i + 1].index : lines.length;
-            
-            const title = titles[i].title.replace(/##+\s*|【|】/g, '').replace(/-\s*剧情概括\s*$/, '').trim();
+            const rawSection = lines.slice(start, end).join('\n').trim();
             const content = lines.slice(start + 1, end).join('\n').trim();
+
+            let title = titles[i].title
+                .replace(/^#{1,6}\s*/, '')
+                .replace(/^【/, '')
+                .replace(/】$/, '')
+                .replace(/-\s*剧情概括\s*$/, '')
+                .trim();
+
+            const isMetaSection = metaSectionKeywords.some(keyword => title.includes(keyword));
+
+            if (isMetaSection && chapters.length > 0) {
+                const lastChapter = chapters[chapters.length - 1];
+                lastChapter.content += (lastChapter.content ? '\n\n' : '') + rawSection;
+                continue;
+            }
 
             if (title && content) {
                 chapters.push({ title, content });
@@ -306,6 +507,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // =================================================================
 
     async function handleGenerateSummary() {
+        // 智能勾选：概括章节只需要原文章节
+        smartSelectContext('summary');
+        
         // 1. 检查并获取选中的原文章节
         if (!allElements.masterCheckboxChapters.checked || chaptersForPreview.length === 0) {
             return alert('请先在"附加上下文"区域勾选"原文章节"并确保已选择章节。');
@@ -406,6 +610,15 @@ document.addEventListener('DOMContentLoaded', function() {
     async function handleSendPrompt() {
         const userPrompt = allElements.promptInput.value.trim();
         if (!userPrompt) return alert('请输入你的要求！');
+        
+        // 智能勾选：根据用户输入判断需要哪些上下文
+        if (isPlotDesignIntent(userPrompt)) {
+            // 如果是剧情设计类需求，只勾选当前原文章节剧情
+            smartSelectContext('plot-design');
+        } else {
+            // 常规对话，确保剧情梗概被勾选（如果有的话）
+            smartSelectContext('general');
+        }
         
         let contextParts = [];
         
@@ -522,6 +735,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (result.is_new && !currentNovel) {
                 currentNovel = { file_id: result.file_id, filename: result.filename, chapters: result.chapters };
+                selectedPlotBookId = getPlotBookKeyFromNovel(currentNovel);
                 chaptersForPreview = [...currentNovel.chapters];
                 renderContextPreviewArea();
             } else if (currentNovel && result.chapters && result.chapters.length > currentNovel.chapters.length) {
@@ -558,6 +772,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!rawContent) return alert("错误：找不到原始AI回复内容。");
 
         const parsedSummaries = parseAiSummaryContent(rawContent);
+        const bookInfo = getActivePlotBookInfo();
         
         if (parsedSummaries.length > 0) {
             parsedSummaries.forEach(summary => {
@@ -566,10 +781,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     title: summary.title,
                     content: summary.content,
                     relatedChapters: aiBubble._relatedChapters || [],
+                    bookId: bookInfo.id,
+                    bookTitle: bookInfo.title,
                 });
             });
+            selectedPlotBookId = bookInfo.id;
             savePlotContextToLocalStorage(); // 保存到 localStorage
             alert(`已成功解析并保存 ${parsedSummaries.length} 个新剧情到剧情库！`);
+            if (allElements.plotContextModal.classList.contains('active')) {
+                renderPlotContextModal();
+            }
         } else {
             alert("未能从AI回复中解析出有效的剧情梗概。");
         }
@@ -581,18 +802,33 @@ document.addEventListener('DOMContentLoaded', function() {
         const rawContent = aiBubble._rawContent;
         if (!rawContent) return alert("错误：找不到原始AI回复内容。");
         
-        const title = prompt('请输入定稿标题：', `剧情定稿 ${myDrafts.length + 1}`);
-        if (!title) return; // 用户取消
+        // 使用与"存为剧情"相同的解析逻辑
+        const parsedSummaries = parseAiSummaryContent(rawContent);
         
-        myDrafts.push({
-            id: Date.now(),
-            title: title,
-            content: rawContent,
-            createdAt: new Date().toLocaleString()
-        });
-        
-        allElements.draftsCountSpan.textContent = myDrafts.length;
-        alert(`已保存为定稿：${title}`);
+        if (parsedSummaries.length > 0) {
+            const bookInfo = getActivePlotBookInfo();
+            parsedSummaries.forEach(summary => {
+                const draftId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                const draftEntry = {
+                    id: draftId,
+                    title: summary.title,
+                    content: summary.content,
+                    createdAt: new Date().toLocaleString(),
+                    bookId: bookInfo.id,
+                    bookTitle: bookInfo.title,
+                };
+                myDrafts.push(draftEntry);
+                activeDraftId = draftId;
+            });
+            selectedDraftBookId = bookInfo.id;
+            updateDraftCountBadge();
+            if (allElements.viewDraftsModal.classList.contains('active')) {
+                renderDraftsModal();
+            }
+            alert(`已成功保存 ${parsedSummaries.length} 个章节定稿！`);
+        } else {
+            alert("未能从AI回复中解析出有效的章节内容。");
+        }
     }
     
     function updateCurrentChapterPlotPreview() {
@@ -653,9 +889,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- 界面切换逻辑 ---
-    allElements.sidebarToggleBtn.addEventListener('click', () => {
-        allElements.pageBody.classList.toggle('sidebar-collapsed');
-    });
+    // 注意：侧边栏切换功能由 common.js 中的 initSidebarToggle() 处理
 
     allElements.mainTabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -700,7 +934,51 @@ document.addEventListener('DOMContentLoaded', function() {
     allElements.masterCheckboxSummaries.addEventListener('change', updateSelectedContextSummary);
     allElements.masterCheckboxCurrentChapterPlot.addEventListener('change', updateSelectedContextSummary);
 
-    allElements.fabViewDraftsBtn.addEventListener('click', () => { renderDraftsList(); openModal(allElements.viewDraftsModal); });
+    // 清空按钮事件监听
+    allElements.clearChaptersBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 阻止触发details的展开/收起
+        if (chaptersForPreview.length === 0) {
+            alert('当前没有已选择的原文章节');
+            return;
+        }
+        if (confirm(`确定要清空所有已选择的原文章节吗？（共 ${chaptersForPreview.length} 项）`)) {
+            chaptersForPreview = [];
+            renderContextPreviewArea();
+            updateSelectedContextSummary();
+            saveNovelToLocalStorage(); // 保存到localStorage
+            alert('已清空所有原文章节');
+        }
+    });
+
+    allElements.clearSummariesBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 阻止触发details的展开/收起
+        if (summariesForPreview.length === 0) {
+            alert('当前没有已选择的剧情梗概');
+            return;
+        }
+        if (confirm(`确定要清空所有已选择的剧情梗概吗？（共 ${summariesForPreview.length} 项）`)) {
+            summariesForPreview = [];
+            renderContextPreviewArea();
+            updateSelectedContextSummary();
+            alert('已清空所有剧情梗概');
+        }
+    });
+
+    allElements.clearCurrentPlotBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // 阻止触发details的展开/收起
+        if (currentChapterPlotForPreview.length === 0) {
+            alert('当前没有已选择的当前原文章节剧情');
+            return;
+        }
+        if (confirm(`确定要清空所有已选择的当前原文章节剧情吗？（共 ${currentChapterPlotForPreview.length} 项）`)) {
+            currentChapterPlotForPreview = [];
+            renderContextPreviewArea();
+            updateSelectedContextSummary();
+            alert('已清空所有当前原文章节剧情');
+        }
+    });
+
+    allElements.fabViewDraftsBtn.addEventListener('click', () => { renderDraftsModal(); openModal(allElements.viewDraftsModal); });
     allElements.fabPlotContextBtn.addEventListener('click', () => { renderPlotContextModal(); openModal(allElements.plotContextModal); });
     
     // 【新增】全选/取消全选章节
@@ -798,10 +1076,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 保存小说数据，但先不加载到上下文
             currentNovel = { file_id: result.file_id, filename: result.filename, chapters: result.chapters };
-            // 重置上下文
-            plotContextSummaries = [];
-            clearPlotContextFromLocalStorage(); // 清除剧情库 localStorage
+            selectedPlotBookId = getPlotBookKeyFromNovel(currentNovel);
+            // 重置与当前小说相关的上下文选择
             summariesForPreview = [];
+            currentChapterPlotForPreview = [];
             chaptersForPreview = []; // 清空，等待用户选择
             
             // 保存到 localStorage（虽然此时 chaptersForPreview 为空，但保存小说元数据）
@@ -837,14 +1115,67 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function renderPlotContextModal() {
-        const container = allElements.plotListContainer;
-        container.innerHTML = plotContextSummaries.length > 0 ? '' : '<li style="color: #999; text-align: center; padding: 20px;">暂无已保存的剧情</li>';
+        ensureSelectedPlotBookExists();
+        renderPlotBookList();
+        renderPlotList();
         allElements.plotPreviewArea.innerHTML = '<h3>请从左侧选择剧情以预览</h3><p style="color: #666;">...</p>';
-        allElements.selectAllPlotsButton.textContent = '全选'; // 重置
+    }
 
-        plotContextSummaries.forEach(summary => {
+    function renderPlotBookList() {
+        const bookListEl = allElements.plotBookList;
+        if (!bookListEl) return;
+        const books = getPlotBooks();
+        bookListEl.innerHTML = '';
+
+        if (books.length === 0) {
+            bookListEl.innerHTML = '<li class="placeholder">暂无剧情，请先保存。</li>';
+            allElements.selectAllPlotsButton.disabled = true;
+            return;
+        }
+
+        allElements.selectAllPlotsButton.disabled = false;
+        books.forEach(book => {
             const li = document.createElement('li');
-            const isSelected = summariesForPreview.some(s => s.id === summary.id);
+            if (book.id === selectedPlotBookId) {
+                li.classList.add('active');
+            }
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'book-title';
+            titleSpan.textContent = book.title;
+            const countSpan = document.createElement('span');
+            countSpan.className = 'book-count';
+            countSpan.textContent = `${book.count} 条`;
+            li.appendChild(titleSpan);
+            li.appendChild(countSpan);
+            li.addEventListener('click', () => {
+                selectedPlotBookId = book.id;
+                renderPlotContextModal();
+            });
+            bookListEl.appendChild(li);
+        });
+
+    }
+
+    function renderPlotList() {
+        const container = allElements.plotListContainer;
+        container.innerHTML = '';
+        allElements.selectAllPlotsButton.textContent = '全选';
+        const plots = getPlotsByBook(selectedPlotBookId);
+        if (allElements.clearPlotSelectionsBtn) {
+            allElements.clearPlotSelectionsBtn.disabled = plots.length === 0;
+        }
+
+        if (plots.length === 0) {
+            container.innerHTML = '<li style="color: #999; text-align: center; padding: 20px;">该书暂未保存剧情</li>';
+            allElements.selectAllPlotsButton.disabled = true;
+            return;
+        }
+
+        allElements.selectAllPlotsButton.disabled = false;
+
+        plots.forEach(summary => {
+            const li = document.createElement('li');
+            const isSelected = summariesForPreview.some(s => s.id === summary.id) || currentChapterPlotForPreview.some(s => s.id === summary.id);
             li.innerHTML = `
                 <input type="checkbox" class="plot-select-checkbox" value="${summary.id}" ${isSelected ? 'checked' : ''} style="margin-right: 10px;">
                 <span class="plot-title">${summary.title}</span>
@@ -858,12 +1189,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     function renderPlotPreview(summary) {
-        const chapterInfo = summary.relatedChapters && summary.relatedChapters.length > 0 
-            ? `基于原文: ${summary.relatedChapters.map(c => c.title).join(', ')}` 
-            : '未关联任何章节';
-        allElements.plotPreviewArea.innerHTML = `<h3>${summary.title}</h3><p style="font-size: 0.85rem; color: #666; margin-top: -10px; margin-bottom: 15px;">${chapterInfo}</p><div style="white-space: pre-wrap;">${summary.content}</div>`;
+        allElements.plotPreviewArea.innerHTML = `<h3>${summary.title}</h3><div style="white-space: pre-wrap; margin-top: 10px;">${summary.content}</div>`;
     }
     allElements.selectAllPlotsButton.addEventListener('click', () => {
+        if (allElements.selectAllPlotsButton.disabled) return;
         const checkboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox');
         const isAllSelected = Array.from(checkboxes).every(cb => cb.checked);
         checkboxes.forEach(checkbox => {
@@ -872,9 +1201,101 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.selectAllPlotsButton.textContent = !isAllSelected ? '取消全选' : '全选';
     });
 
+    if (allElements.clearPlotSelectionsBtn) {
+        allElements.clearPlotSelectionsBtn.addEventListener('click', () => {
+            const checkedBoxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox:checked');
+            if (checkedBoxes.length === 0) {
+                alert('请先勾选需要清空的剧情');
+                return;
+            }
+
+            if (!confirm(`确定要删除选中的 ${checkedBoxes.length} 条剧情吗？此操作不可撤销。`)) {
+                return;
+            }
+
+            const selectedIds = new Set(Array.from(checkedBoxes).map(cb => String(cb.value)));
+            const beforeTotal = plotContextSummaries.length;
+            plotContextSummaries = plotContextSummaries.filter(summary => !selectedIds.has(String(summary.id)));
+            if (plotContextSummaries.length !== beforeTotal) {
+                savePlotContextToLocalStorage();
+                allElements.plotContextCount.textContent = plotContextSummaries.length;
+            }
+
+            const beforeSummaries = summariesForPreview.length;
+            summariesForPreview = summariesForPreview.filter(item => !selectedIds.has(String(item.id)));
+            const beforeCurrentPlots = currentChapterPlotForPreview.length;
+            currentChapterPlotForPreview = currentChapterPlotForPreview.filter(item => !selectedIds.has(String(item.id)));
+            if (beforeSummaries !== summariesForPreview.length || beforeCurrentPlots !== currentChapterPlotForPreview.length) {
+                renderContextPreviewArea();
+                updateCurrentChapterPlotPreview();
+            } else {
+                updateSelectedContextSummary();
+            }
+
+            checkedBoxes.forEach(cb => { cb.checked = false; });
+            allElements.selectAllPlotsButton.textContent = '全选';
+
+            ensureSelectedPlotBookExists();
+            renderPlotBookList();
+            renderPlotList();
+            allElements.plotPreviewArea.innerHTML = '<h3>请从左侧选择剧情以预览</h3><p style="color: #666;">...</p>';
+            alert('已清空所选剧情');
+        });
+    }
+
+    if (allElements.selectAllDraftsButton) {
+        allElements.selectAllDraftsButton.addEventListener('click', () => {
+            if (allElements.selectAllDraftsButton.disabled) return;
+            const drafts = getDraftsByBook(selectedDraftBookId);
+            if (drafts.length === 0) return;
+            const shouldSelectAll = drafts.some(draft => !draftSelectionState.has(String(draft.id)));
+            drafts.forEach(draft => {
+                const draftId = String(draft.id);
+                if (shouldSelectAll) {
+                    draftSelectionState.add(draftId);
+                } else {
+                    draftSelectionState.delete(draftId);
+                }
+            });
+            renderDraftList();
+        });
+    }
+
+    if (allElements.clearDraftSelectionsBtn) {
+        allElements.clearDraftSelectionsBtn.addEventListener('click', () => {
+            if (allElements.clearDraftSelectionsBtn.disabled) return;
+            const checkedBoxes = allElements.draftsListContainer
+                ? allElements.draftsListContainer.querySelectorAll('.draft-select-checkbox:checked')
+                : [];
+            if (!checkedBoxes || checkedBoxes.length === 0) {
+                alert('请先勾选需要清空的定稿');
+                return;
+            }
+
+            if (!confirm(`确定要删除选中的 ${checkedBoxes.length} 条定稿吗？此操作不可撤销。`)) {
+                return;
+            }
+
+            const selectedIds = new Set(Array.from(checkedBoxes).map(cb => cb.value));
+            if (selectedIds.size === 0) {
+                return;
+            }
+
+            myDrafts = myDrafts.filter(draft => !selectedIds.has(String(draft.id)));
+            selectedIds.forEach(id => draftSelectionState.delete(id));
+            pruneDraftSelectionState();
+            updateDraftCountBadge();
+            renderDraftsModal();
+        });
+    }
+
     allElements.addSelectedPlotsBtn.addEventListener('click', () => {
         const selectedCheckboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox:checked');
         const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+        if (selectedIds.length === 0) {
+            alert('请至少选中一个剧情再添加到梗概');
+            return;
+        }
         
         summariesForPreview = plotContextSummaries.filter(summary => selectedIds.includes(String(summary.id)));
         
@@ -906,49 +1327,218 @@ document.addEventListener('DOMContentLoaded', function() {
         closeModal(allElements.plotContextModal);
     });
 
-    // 新增：清空剧情库按钮事件监听
-    document.getElementById('clearPlotLibraryBtn').addEventListener('click', () => {
-        if (plotContextSummaries.length === 0) {
-            alert('剧情库已经是空的了！');
+    function updateDraftCountBadge() {
+        allElements.draftsCountSpan.textContent = myDrafts.length;
+    }
+
+    function pruneDraftSelectionState() {
+        const validIds = new Set(myDrafts.map(draft => String(draft.id)));
+        draftSelectionState.forEach(id => {
+            if (!validIds.has(id)) {
+                draftSelectionState.delete(id);
+            }
+        });
+        if (activeDraftId && !validIds.has(activeDraftId)) {
+            activeDraftId = null;
+        }
+    }
+
+    function getDraftsByBook(bookId) {
+        const key = bookId || DEFAULT_PLOT_BOOK_KEY;
+        return myDrafts.filter(draft => (draft.bookId || DEFAULT_PLOT_BOOK_KEY) === key);
+    }
+
+    function getDraftBooks() {
+        const bookMap = new Map();
+        myDrafts.forEach(draft => {
+            const key = draft.bookId || DEFAULT_PLOT_BOOK_KEY;
+            if (!bookMap.has(key)) {
+                bookMap.set(key, {
+                    id: key,
+                    title: draft.bookTitle || DEFAULT_PLOT_BOOK_TITLE,
+                    count: 0
+                });
+            }
+            bookMap.get(key).count += 1;
+        });
+        return Array.from(bookMap.values()).sort((a, b) => a.title.localeCompare(b.title, 'zh'));
+    }
+
+    function ensureSelectedDraftBookExists() {
+        const books = getDraftBooks();
+        if (books.length === 0) {
+            selectedDraftBookId = DEFAULT_PLOT_BOOK_KEY;
             return;
         }
-        
-        const confirmClear = confirm(`确定要清空剧情库吗？\n\n这将删除所有 ${plotContextSummaries.length} 条已保存的剧情，此操作不可撤销！`);
-        if (confirmClear) {
-            // 清空内存中的数据
-            plotContextSummaries = [];
-            summariesForPreview = [];
-            
-            // 清空 localStorage
-            clearPlotContextFromLocalStorage();
-            
-            // 更新UI
-            renderContextPreviewArea();
-            renderPlotContextModal();
-            allElements.plotContextCount.textContent = plotContextSummaries.length;
-            
-            alert('剧情库已清空！');
+        if (!books.some(book => book.id === selectedDraftBookId)) {
+            const novelKey = currentNovel ? getPlotBookKeyFromNovel(currentNovel) : null;
+            if (novelKey && books.some(book => book.id === novelKey)) {
+                selectedDraftBookId = novelKey;
+            } else {
+                selectedDraftBookId = books[0].id;
+            }
         }
-    });
+    }
 
-    function renderDraftsList() {
-        const container = allElements.draftsListContainer;
-        container.innerHTML = myDrafts.length > 0 ? '' : '<li style="color: #999; text-align: center; padding: 20px;">暂无定稿</li>';
-        myDrafts.forEach((draft, index) => {
+    function renderDraftsModal() {
+        pruneDraftSelectionState();
+        ensureSelectedDraftBookExists();
+        renderDraftBookList();
+
+        const draftsInBook = getDraftsByBook(selectedDraftBookId);
+
+        if (draftsInBook.length === 0) {
+            renderDraftList(draftsInBook);
+            activeDraftId = null;
+            resetDraftPreviewArea();
+            return;
+        }
+
+        if (!activeDraftId || !draftsInBook.some(draft => String(draft.id) === activeDraftId)) {
+            activeDraftId = String(draftsInBook[0].id);
+        }
+
+        renderDraftList(draftsInBook);
+
+        const activeDraft = draftsInBook.find(draft => String(draft.id) === activeDraftId) || draftsInBook[0];
+        renderDraftPreview(activeDraft);
+    }
+
+    function renderDraftBookList() {
+        const bookListEl = allElements.draftsBookList;
+        if (!bookListEl) return;
+        const books = getDraftBooks();
+        bookListEl.innerHTML = '';
+
+        if (books.length === 0) {
+            bookListEl.innerHTML = '<li class="placeholder">暂无定稿，请先保存。</li>';
+            if (allElements.selectAllDraftsButton) {
+                allElements.selectAllDraftsButton.disabled = true;
+                allElements.selectAllDraftsButton.textContent = '全选';
+            }
+            if (allElements.clearDraftSelectionsBtn) {
+                allElements.clearDraftSelectionsBtn.disabled = true;
+            }
+            return;
+        }
+
+        if (allElements.selectAllDraftsButton) {
+            allElements.selectAllDraftsButton.disabled = false;
+        }
+        if (allElements.clearDraftSelectionsBtn) {
+            allElements.clearDraftSelectionsBtn.disabled = false;
+        }
+
+        books.forEach(book => {
             const li = document.createElement('li');
-            li.textContent = draft.title;
-            li.dataset.index = index;
-            li.addEventListener('click', () => {
-                container.querySelectorAll('li').forEach(item => item.classList.remove('active'));
+            if (book.id === selectedDraftBookId) {
                 li.classList.add('active');
-                renderDraftPreview(draft);
+            }
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'book-title';
+            titleSpan.textContent = book.title;
+            const countSpan = document.createElement('span');
+            countSpan.className = 'book-count';
+            countSpan.textContent = `${book.count} 条`;
+            li.appendChild(titleSpan);
+            li.appendChild(countSpan);
+            li.addEventListener('click', () => {
+                selectedDraftBookId = book.id;
+                renderDraftsModal();
             });
-            container.appendChild(li);
+            bookListEl.appendChild(li);
         });
     }
 
+    function renderDraftList(draftsOverride) {
+        const container = allElements.draftsListContainer;
+        if (!container) return [];
+        container.innerHTML = '';
+        const drafts = Array.isArray(draftsOverride) ? draftsOverride : getDraftsByBook(selectedDraftBookId);
+
+        if (drafts.length === 0) {
+            container.innerHTML = '<li style="color: #999; text-align: center; padding: 20px;">该书暂未保存定稿</li>';
+            if (allElements.selectAllDraftsButton) {
+                allElements.selectAllDraftsButton.disabled = true;
+                allElements.selectAllDraftsButton.textContent = '全选';
+            }
+            if (allElements.clearDraftSelectionsBtn) {
+                allElements.clearDraftSelectionsBtn.disabled = true;
+            }
+            return;
+        }
+
+        if (allElements.selectAllDraftsButton) {
+            allElements.selectAllDraftsButton.disabled = false;
+        }
+        if (allElements.clearDraftSelectionsBtn) {
+            allElements.clearDraftSelectionsBtn.disabled = false;
+        }
+
+        drafts.forEach(draft => {
+            const draftId = String(draft.id);
+            const li = document.createElement('li');
+            if (draftId === activeDraftId) {
+                li.classList.add('active');
+            }
+            li.innerHTML = `
+                <input type="checkbox" class="draft-select-checkbox" value="${draftId}" ${draftSelectionState.has(draftId) ? 'checked' : ''} style="margin-right: 10px;">
+                <span class="draft-title">${draft.title}</span>
+            `;
+            const checkbox = li.querySelector('.draft-select-checkbox');
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    draftSelectionState.add(draftId);
+                } else {
+                    draftSelectionState.delete(draftId);
+                }
+                updateDraftSelectAllButtonState(drafts);
+            });
+
+            li.addEventListener('click', (event) => {
+                if (event.target && event.target.classList.contains('draft-select-checkbox')) {
+                    return;
+                }
+                const siblings = container.querySelectorAll('li');
+                siblings.forEach(item => item.classList.remove('active'));
+                li.classList.add('active');
+                renderDraftPreview(draft);
+            });
+
+            container.appendChild(li);
+        });
+
+        updateDraftSelectAllButtonState(drafts);
+        return drafts;
+    }
+
+    function updateDraftSelectAllButtonState(drafts) {
+        if (!allElements.selectAllDraftsButton) return;
+        if (drafts.length === 0) {
+            allElements.selectAllDraftsButton.textContent = '全选';
+            return;
+        }
+        const allSelected = drafts.every(draft => draftSelectionState.has(String(draft.id)));
+        allElements.selectAllDraftsButton.textContent = allSelected ? '取消全选' : '全选';
+    }
+
+    function resetDraftPreviewArea() {
+        allElements.draftsPreviewArea.innerHTML = '<h3>请从左侧选择章节以预览</h3><p style="color: #666;">...</p>';
+    }
+
     function renderDraftPreview(draft) {
-        allElements.draftsPreviewArea.innerHTML = `<h3>${draft.title}</h3><div style="white-space: pre-wrap;">${draft.content}</div>`;
+        if (!draft) {
+            resetDraftPreviewArea();
+            return;
+        }
+        activeDraftId = String(draft.id);
+        allElements.draftsPreviewArea.innerHTML = `
+            <h3>${draft.title}</h3>
+            <div style="color: #888; font-size: 0.85em; margin-bottom: 10px;">
+                ${draft.bookTitle || DEFAULT_PLOT_BOOK_TITLE} · 保存于 ${draft.createdAt || '未知时间'}
+            </div>
+            <div style="white-space: pre-wrap;">${draft.content}</div>
+        `;
     }
     allElements.closeDraftsModalBtn.addEventListener('click', () => closeModal(allElements.viewDraftsModal));
 
@@ -985,6 +1575,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const hasRestoredNovel = loadNovelFromLocalStorage();
     if (hasRestoredNovel) {
         console.log('已恢复上次加载的小说:', currentNovel.filename);
+        selectedPlotBookId = getPlotBookKeyFromNovel(currentNovel);
+        ensureSelectedPlotBookExists();
         // 显示恢复提示
         const restoreBubble = document.createElement('div');
         restoreBubble.className = 'bubble ai-bubble';
@@ -994,6 +1586,7 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.conversationHistory.insertBefore(restoreBubble, allElements.conversationHistory.firstChild);
     }
     
+    updateDraftCountBadge();
     renderContextPreviewArea();
     switchMainTab('plot-design'); // 默认显示剧情设计标签页
     appendQuickCommandButton(); // 初始加载时添加按钮

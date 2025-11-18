@@ -5,7 +5,7 @@ import re
 from flask import current_app
 from ..prompts.prompt_manager import get_prompt, get_system_prompt
 from ..utils.logger import ai_logger, log_ai_call
-from .context_manager import ContextManager
+from app.core.context import ContextManager
 
 def call_deepseek_api(messages, temperature=0.7, max_tokens=4000):
     api_key = current_app.config.get('DEEPSEEK_API_KEY')

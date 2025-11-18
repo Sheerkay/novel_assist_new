@@ -5,8 +5,9 @@ import uuid
 import json
 import time
 import re
-from app.services import ai_service, novel_service
-from app.services.context_manager import ContextManager
+from app.core.chapters import split_chapters
+from app.core.context import ContextManager
+from app.services import ai_service
 from app.utils.logger import api_logger, log_request, log_response, log_chapter_summary
 
 bp = Blueprint('generation', __name__, url_prefix='/api')
@@ -173,7 +174,7 @@ def generate_with_analysis():
         except ValueError: print(f"警告：无法解析元数据中的章节编号: {numbers_str}")
 
     chapter_count = ai_service.analyze_prompt_for_chapters(prompt)
-    newly_split_chapters = novel_service.split_chapters(content)
+    newly_split_chapters = split_chapters(content)
     
     result = { 'content': content, 'chapter_count': chapter_count, 'prompt': prompt, 'chapters': newly_split_chapters, 'summarized_chapter_numbers': summarized_chapter_numbers }
     
@@ -206,7 +207,7 @@ def generate_with_analysis():
             with open(original_path, 'a', encoding='utf-8') as f: f.write(f"\n\n{content}")
             with open(original_path, 'r', encoding='utf-8') as f: full_content = f.read()
             
-            final_chapters = novel_service.split_chapters(full_content)
+            final_chapters = split_chapters(full_content)
             chapters_info['chapters'] = final_chapters
             
             with open(chapters_file, 'w', encoding='utf-8') as f: json.dump(chapters_info, f, ensure_ascii=False, indent=2)

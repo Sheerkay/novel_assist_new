@@ -8,9 +8,21 @@ function initSidebarToggle() {
     const pageBody = document.getElementById('pageBody');
     
     if (sidebarToggleBtn && pageBody) {
-        sidebarToggleBtn.addEventListener('click', () => {
-            pageBody.classList.toggle('sidebar-collapsed');
+        // 根据本地记录恢复初始状态（默认折叠）
+        const savedState = localStorage.getItem('sidebar-collapsed');
+        const shouldCollapse = savedState === null ? true : savedState === 'true';
+        pageBody.classList.toggle('sidebar-collapsed', shouldCollapse);
+        pageBody.classList.add('sidebar-ready');
+        
+        sidebarToggleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const isCollapsed = pageBody.classList.toggle('sidebar-collapsed');
+            // 保存状态到 localStorage
+            localStorage.setItem('sidebar-collapsed', isCollapsed);
         });
+    } else {
+        console.error('侧边栏功能初始化失败：缺少必需的DOM元素');
     }
 }
 

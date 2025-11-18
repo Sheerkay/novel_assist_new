@@ -4,7 +4,7 @@ import os
 import uuid
 import json
 from werkzeug.utils import secure_filename
-from app.services.novel_service import allowed_file, split_chapters
+from app.core.chapters import allowed_file, split_chapters
 
 bp = Blueprint('novel', __name__, url_prefix='/api')
 

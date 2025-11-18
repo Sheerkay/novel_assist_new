@@ -92,20 +92,25 @@ header {
     grid-template-columns: var(--sidebar-width) 1fr; 
     transition: grid-template-columns 0.3s ease-in-out; 
     overflow: hidden; 
+    height: 100%;
+}
+
+.page-body:not(.sidebar-ready) {
+    transition: none;
 }
 
 .page-body.sidebar-collapsed { 
-    grid-template-columns: 0 1fr; 
+    grid-template-columns: 0 1fr !important;
 }
 
 .page-body.sidebar-collapsed .app-sidebar { 
-    width: 0; 
-    min-width: 0; 
-    padding: 0; 
-    overflow: hidden; 
-    border-right: none; 
-    opacity: 0; 
-    pointer-events: none; 
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border-right: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 
 .page-body:not(.sidebar-collapsed) .app-sidebar { 
