@@ -65,6 +65,30 @@ const api = {
             },
         });
     },
+
+    generateWithAnalysis: ({
+        prompt,
+        contextString = '',
+        contextChapters = [],
+        contextLabels = null,
+        fileId = null,
+    }) => {
+        const body = {
+            prompt,
+            context_string: contextString,
+            context_chapters: Array.isArray(contextChapters) ? contextChapters : [],
+        };
+        if (contextLabels && typeof contextLabels === 'object') {
+            body.context_labels = contextLabels;
+        }
+        if (fileId) {
+            body.file_id = fileId;
+        }
+        return request('/generate-with-analysis', {
+            method: 'POST',
+            body,
+        });
+    },
     
     processChapter: (fileId, chapterIndex, prompt) => {
         return request('/process-chapter', {
@@ -73,10 +97,23 @@ const api = {
         });
     },
 
-    summarizeChapters: (chapters) => {
+    summarizeChapters: ({ chapters, fileId } = {}) => {
         return request('/summarize-chapters', {
             method: 'POST',
-            body: { chapters: chapters },
+            body: {
+                chapters: chapters || [],
+                file_id: fileId || null,
+            },
+        });
+    },
+
+    getLogs: (logType) => {
+        return request(`/logs/${encodeURIComponent(logType)}`);
+    },
+
+    clearLogs: (logType) => {
+        return request(`/logs/${encodeURIComponent(logType)}`, {
+            method: 'DELETE',
         });
     },
 };

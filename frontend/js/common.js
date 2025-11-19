@@ -123,6 +123,71 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+function renderChapterSummaryDetails(container, summaries) {
+    if (!container) {
+        return;
+    }
+
+    const existing = container.querySelector('.chapter-summary-details');
+    if (existing) {
+        existing.remove();
+    }
+
+    if (!Array.isArray(summaries) || summaries.length === 0) {
+        return;
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chapter-summary-details';
+
+    const heading = document.createElement('h4');
+    heading.textContent = '章节概括详情';
+    wrapper.appendChild(heading);
+
+    const list = document.createElement('ol');
+    list.className = 'chapter-summary-list';
+
+    summaries.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.className = 'chapter-summary-item';
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'summary-title-row';
+
+        const title = document.createElement('span');
+        title.className = 'summary-title';
+        const displayTitle = (item && typeof item.title === 'string' && item.title.trim()) ? item.title.trim() : `章节 ${index + 1}`;
+        title.textContent = displayTitle;
+        titleRow.appendChild(title);
+
+        const status = document.createElement('span');
+        status.className = `summary-status ${item && item.success ? 'is-success' : 'is-failed'}`;
+        status.textContent = item && item.success ? '成功' : '失败';
+        titleRow.appendChild(status);
+
+        const lengthTag = document.createElement('span');
+        lengthTag.className = 'summary-length';
+        const lengthValue = item && typeof item.length === 'number' ? item.length : 0;
+        lengthTag.textContent = `${lengthValue} 字`; 
+        titleRow.appendChild(lengthTag);
+
+        li.appendChild(titleRow);
+
+        const content = document.createElement('div');
+        content.className = 'summary-text';
+        const summaryText = item && typeof item.summary === 'string' && item.summary.trim() ? item.summary.trim() : '未生成剧情概括。';
+        content.textContent = summaryText;
+        li.appendChild(content);
+
+        list.appendChild(li);
+    });
+
+    wrapper.appendChild(list);
+    container.appendChild(wrapper);
+}
+
+window.renderChapterSummaryDetails = renderChapterSummaryDetails;
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
     initSidebarToggle();

@@ -300,3 +300,74 @@ main.main-content {
 .hidden {
     display: none !important;
 }
+
+.chapter-summary-details {
+    margin-top: 16px;
+    padding: 16px;
+    border: 1px solid #e3e7f3;
+    border-radius: 10px;
+    background-color: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.chapter-summary-details h4 {
+    margin-bottom: 10px;
+    font-size: 1rem;
+    color: var(--primary-color);
+}
+
+.chapter-summary-list {
+    list-style: decimal inside;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-left: 0;
+}
+
+.chapter-summary-item {
+    background: #f9fbff;
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid #dde4f5;
+}
+
+.summary-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.summary-title {
+    font-weight: 600;
+    color: var(--dark-color);
+}
+
+.summary-status {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: #fff;
+}
+
+.summary-status.is-success {
+    background-color: var(--success-color);
+}
+
+.summary-status.is-failed {
+    background-color: var(--error-color);
+}
+
+.summary-length {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: #6b7a99;
+}
+
+.summary-text {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #334;
+    white-space: pre-wrap;
+}

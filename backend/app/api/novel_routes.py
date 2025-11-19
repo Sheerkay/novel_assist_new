@@ -5,6 +5,7 @@ import uuid
 import json
 from werkzeug.utils import secure_filename
 from app.core.chapters import allowed_file, split_chapters
+from app.services import chapter_service
 
 bp = Blueprint('novel', __name__, url_prefix='/api')
 
@@ -59,21 +60,17 @@ def save_chapter():
     if file_id is None or chapter_index is None or content is None:
         return jsonify({'error': '缺少必要参数'}), 400
 
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    chapters_file = os.path.join(upload_folder, 'analysis', f"{file_id}_chapters.json")
-    
-    try:
-        with open(chapters_file, 'r', encoding='utf-8') as f:
-            chapters_info = json.load(f)
-    except FileNotFoundError:
-        return jsonify({'error': '找不到章节信息'}), 404
+    if isinstance(chapter_index, str):
+        try:
+            chapter_index = int(chapter_index)
+        except ValueError:
+            pass
 
-    if not isinstance(chapter_index, int) or chapter_index >= len(chapters_info['chapters']):
+    try:
+        chapter_service.update_chapter_content(file_id, chapter_index, content)
+    except chapter_service.ChapterMetadataNotFoundError:
+        return jsonify({'error': '找不到章节信息'}), 404
+    except chapter_service.ChapterIndexError:
         return jsonify({'error': '章节索引超出范围'}), 400
-        
-    chapters_info['chapters'][chapter_index]['content'] = content
-    
-    with open(chapters_file, 'w', encoding='utf-8') as f:
-        json.dump(chapters_info, f, ensure_ascii=False, indent=2)
         
     return jsonify({'message': '保存成功'}), 200

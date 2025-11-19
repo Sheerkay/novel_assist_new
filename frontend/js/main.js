@@ -379,10 +379,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (selectedChapters.length === 0) {
             return alert('当前没有可用的章节进行概括。请确保"原文章节"已勾选且包含内容。');
         }
-        const chapterContents = selectedChapters.map(chapter => {
-            return `【章节：${chapter.title}】\n${chapter.content}`;
-        }).join('\n\n---\n\n');
-
         // 2. 在对话历史中显示用户操作和AI思考状态
         const userBubble = document.createElement('div');
         userBubble.className = 'bubble user-bubble';
@@ -408,39 +404,42 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.conversationHistory.appendChild(aiMessageWrapper);
 
         // 3. 准备并发送API请求
-        const requestBody = {
-        if (!text || !text.trim()) return chapters; // Check if text is empty or only whitespace
-            file_id: currentNovel ? currentNovel.file_id : null
+        const payload = {
+            chapters: selectedChapters,
+            fileId: currentNovel ? currentNovel.file_id : null
         };
 
         // 使用统一日志系统
         Logger.chapter.summarize(selectedChapters);
-        Logger.api.request('/api/summarize-chapters', 'POST', requestBody);
+        Logger.api.request('/api/summarize-chapters', 'POST', payload);
 
         try {
-            // 注意：我们使用的是一个新的API端点 /api/summarize-chapters
-            const response = await fetch('/api/summarize-chapters', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-            
-            Logger.api.response('/api/summarize-chapters', response.status, { ok: response.ok });
+            const result = await api.summarizeChapters(payload);
+            Logger.api.response('/api/summarize-chapters', 200, { chapterCount: result.chapter_count });
 
             const aiContentDiv = aiBubble.querySelector('.ai-content');
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '服务器发生未知错误');
-            }
+            const summaryMarkdown = (() => {
+                if (result.summary && result.summary.trim()) {
+                    return result.summary;
+                }
+                if (Array.isArray(result.summaries) && result.summaries.length > 0) {
+                    return result.summaries
+                        .map(item => `## ${item.title || '章节概括'}\n${item.summary || ''}`)
+                        .join('\n\n');
+                }
+                return '没有生成剧情概括。';
+            })();
 
-            const result = await response.json();
-            
-            Logger.chapter.summaryResult(result.summary);
-            
+            Logger.chapter.summaryResult(summaryMarkdown);
+
             // 4. 显示结果
-            aiContentDiv.innerHTML = marked.parse(result.summary);
-            aiBubble._rawContent = result.summary; // 保存原始文本，用于"存为剧情"
+            aiContentDiv.innerHTML = marked.parse(summaryMarkdown);
+            aiBubble._rawContent = summaryMarkdown; // 保存原始文本，用于"存为剧情"
             aiBubble._relatedChapters = selectedChapters; // 关联章节
+            aiBubble._chapterSummaries = Array.isArray(result.summaries) ? result.summaries : [];
+            if (typeof renderChapterSummaryDetails === 'function') {
+                renderChapterSummaryDetails(aiBubble, aiBubble._chapterSummaries);
+            }
 
             const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
             actionsDiv.innerHTML = `
@@ -457,6 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         } catch (error) {
             console.error('Error generating summary:', error);
+            Logger.api.error('/api/summarize-chapters', error);
             aiBubble.querySelector('.ai-content').textContent = '生成剧情概括时出错，请检查后台服务。';
             allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
             appendQuickCommandButton(); // 即使出错也要添加快捷指令按钮
@@ -535,26 +535,44 @@ document.addEventListener('DOMContentLoaded', function() {
         
         allElements.conversationHistory.appendChild(aiMessageWrapper);
 
-        const requestBody = { 
-            prompt: userPrompt, 
-            context_string: contextString, 
-            file_id: currentNovel ? currentNovel.file_id : null
+        const selectedContextChapters = allElements.masterCheckboxChapters.checked ? chaptersForPreview : [];
+        const contextLabels = {
+            chapters: allElements.chaptersLabel.textContent.trim(),
+            summaries: allElements.summariesLabel.textContent.trim(),
+            currentChapterPlot: allElements.currentChapterPlotLabel.textContent.trim(),
         };
 
+        Logger.context.send({
+            promptLength: userPrompt.length,
+            contextChapters: selectedContextChapters.length,
+            contextSummaries: summariesForPreview.length,
+            contextSnapshotLength: contextString.length,
+        });
+
+        const apiRequestPayload = {
+            prompt: userPrompt,
+            contextString,
+            contextChapters: selectedContextChapters,
+            contextLabels,
+            fileId: currentNovel ? currentNovel.file_id : null,
+        };
+
+        Logger.api.request('/api/generate-with-analysis', 'POST', {
+            fileId: apiRequestPayload.fileId,
+            chapterCount: apiRequestPayload.contextChapters.length,
+            contextLength: contextString.length,
+        });
+
         try {
-            const response = await fetch('/api/generate-with-analysis', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify(requestBody)
+            const result = await api.generateWithAnalysis(apiRequestPayload);
+
+            Logger.api.response('/api/generate-with-analysis', 200, {
+                isChat: !!result.is_chat,
+                isNew: !!result.is_new,
+                chapters: Array.isArray(result.chapters) ? result.chapters.length : 0,
             });
-           
+
             const aiContentDiv = aiBubble.querySelector('.ai-content');
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || '服务器发生未知错误');
-            }
-            
-            const result = await response.json();
             
             // 判断是否为普通对话
             if (result.is_chat) {
@@ -607,6 +625,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         } catch (error) {
             console.error('Error sending prompt:', error);
+            Logger.api.error('/api/generate-with-analysis', error);
             aiBubble.querySelector('.ai-content').textContent = `请求出错: ${error.message}`;
             allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
             appendQuickCommandButton(); // 即使出错也要添加快捷指令按钮
@@ -857,11 +876,14 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('file', file);
         allElements.uploadAndParseBtn.textContent = '解析中...';
         allElements.uploadAndParseBtn.disabled = true;
+
+        Logger.api.request('/api/upload', 'POST', { filename: file.name, size: file.size });
+
         try {
-            const response = await fetch('/api/upload', { method: 'POST', body: formData });
-            if (!response.ok) throw new Error((await response.json()).error || '解析失败');
-            const result = await response.json();
-            
+            const result = await api.uploadNovel(formData);
+
+            Logger.api.response('/api/upload', 200, { chapters: result.chapters?.length || 0 });
+
             // 保存小说数据，但先不加载到上下文
             currentNovel = { file_id: result.file_id, filename: result.filename, chapters: result.chapters };
             // 重置上下文
@@ -876,6 +898,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 显示章节选择界面
             showChapterSelectionView();
         } catch (error) {
+            Logger.api.error('/api/upload', error);
             alert(`上传失败: ${error.message}`);
             showUploadView(); // 失败后返回上传界面
         } finally {
@@ -1126,14 +1149,12 @@ document.addEventListener('DOMContentLoaded', function() {
         allElements.logsText.textContent = '加载中...';
         
         try {
-            const response = await fetch(`/api/logs/${logType}`);
-            if (response.ok) {
-                const data = await response.json();
-                allElements.logsText.textContent = data.content || '暂无日志';
-            } else {
-                allElements.logsText.textContent = '加载日志失败';
-            }
+            Logger.api.request('/api/logs', 'GET', { logType });
+            const data = await api.getLogs(logType);
+            Logger.api.response('/api/logs', 200, { logType });
+            allElements.logsText.textContent = data.content || '暂无日志';
         } catch (error) {
+            Logger.api.error('/api/logs', error);
             allElements.logsText.textContent = `加载失败: ${error.message}`;
         }
     }
@@ -1145,14 +1166,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (confirm('确定要清空当前日志吗？')) {
             const logType = allElements.logTypeSelect.value;
             try {
-                const response = await fetch(`/api/logs/${logType}`, { method: 'DELETE' });
-                if (response.ok) {
-                    alert('日志已清空');
-                    loadLogs();
-                } else {
-                    alert('清空日志失败');
-                }
+                Logger.api.request('/api/logs', 'DELETE', { logType });
+                await api.clearLogs(logType);
+                Logger.api.response('/api/logs', 200, { logType, cleared: true });
+                alert('日志已清空');
+                loadLogs();
             } catch (error) {
+                Logger.api.error('/api/logs', error);
                 alert(`清空失败: ${error.message}`);
             }
         }

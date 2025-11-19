@@ -2,3 +2,6 @@ flask==2.3.3
 flask-cors==4.0.0
 python-dotenv==1.0.0
 requests==2.31.0
+pydantic==2.6.3
+flask-marshmallow==1.2.1
+marshmallow==3.19.0

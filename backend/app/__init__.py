@@ -1,6 +1,7 @@
 # e:\Vs_Project\Novel_asisit\backend\app\__init__.py
 from flask import Flask, send_from_directory
 from flask_cors import CORS
+from app.schemas import ma
 import os
 import shutil
 
@@ -32,17 +33,19 @@ def create_app():
     
     # 初始化 CORS
     CORS(app)
+    ma.init_app(app)
 
     # 确保上传文件夹存在
-    for folder in ['novels', 'analysis', 'generated']:
+    for folder in ['novels', 'analysis', 'generated', 'history']:
         os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], folder), exist_ok=True)
 
     with app.app_context():
         # 注册蓝图
-        from .api import novel_routes, generation_routes, log_routes
+        from .api import novel_routes, generation_routes, log_routes, history_routes
         app.register_blueprint(novel_routes.bp)
         app.register_blueprint(generation_routes.bp)
         app.register_blueprint(log_routes.log_routes)
+        app.register_blueprint(history_routes.history_routes)
 
         # 服务前端的路由
         @app.route('/')

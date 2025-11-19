@@ -15,13 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
         logsText.textContent = '加载中...';
         
         try {
-            const response = await fetch(`/api/logs/${logType}`);
-            if (!response.ok) {
-                throw new Error('加载日志失败');
-            }
-            const data = await response.json();
+            Logger.api.request('/api/logs', 'GET', { logType });
+            const data = await api.getLogs(logType);
+            Logger.api.response('/api/logs', 200, { logType });
             logsText.textContent = data.content || '日志为空';
         } catch (error) {
+            Logger.api.error('/api/logs', error);
             logsText.textContent = `错误: ${error.message}`;
             showToast('加载日志失败', 'error');
         }
@@ -36,17 +35,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const logType = logTypeSelect.value;
         
         try {
-            const response = await fetch(`/api/logs/${logType}`, {
-                method: 'DELETE'
-            });
-            
-            if (!response.ok) {
-                throw new Error('清空日志失败');
-            }
-            
+            Logger.api.request('/api/logs', 'DELETE', { logType });
+            await api.clearLogs(logType);
+            Logger.api.response('/api/logs', 200, { logType, cleared: true });
             showToast('日志已清空', 'success');
             loadLogs();
         } catch (error) {
+            Logger.api.error('/api/logs', error);
             showToast('清空日志失败: ' + error.message, 'error');
         }
     }
