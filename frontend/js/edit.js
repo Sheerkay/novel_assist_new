@@ -15,6 +15,310 @@ document.addEventListener('DOMContentLoaded', function() {
     let draftSelectionState = new Set(); // 存储被勾选的定稿ID
     let activeDraftId = null; // 当前预览的定稿ID
 
+    // =================================================================
+    // 1.1 历史对话会话管理
+    // =================================================================
+    let currentSessionId = null;
+    const STORAGE_KEY_SESSIONS = 'novel_assist_sessions';
+
+    function initHistorySystem() {
+        renderHistoryList();
+        // 绑定新对话按钮事件
+        const newChatBtn = document.getElementById('newChatBtn');
+        if (newChatBtn) {
+            newChatBtn.addEventListener('click', createNewSession);
+        }
+        
+        // 自动加载最近的一个会话，如果没有则新建
+        const sessions = getSessions();
+        if (sessions.length > 0) {
+            loadSession(sessions[0].id);
+        } else {
+            createNewSession();
+        }
+    }
+
+    function getSessions() {
+        try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY_SESSIONS) || '[]');
+        } catch (e) {
+            console.error('读取历史会话失败', e);
+            return [];
+        }
+    }
+
+    function saveSessions(sessions) {
+        localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(sessions));
+        renderHistoryList();
+    }
+
+    function createNewSession() {
+        currentSessionId = null;
+        // 清空对话界面（保留第一个欢迎气泡)
+        const historyContainer = document.getElementById('conversationHistory');
+        if (historyContainer) {
+            // 保留初始欢迎语
+            historyContainer.innerHTML = `
+                <div class="ai-message-wrapper">
+                    <div class="bubble ai-bubble">
+                        <p>你好！请点击右侧"加载小说"按钮加载您的小说，然后点击下方"附加上下文详情"来选择所需的上下文，就可以开始创作了！</p>
+                    </div>
+                </div>
+            `;
+        }
+        // 移除侧边栏的高亮状态
+        document.querySelectorAll('.history-list-item').forEach(el => el.classList.remove('active'));
+        
+        // 添加快捷指令按钮
+        appendQuickCommandButton();
+    }
+
+    function loadSession(sessionId) {
+        const sessions = getSessions();
+        const session = sessions.find(s => s.id === sessionId);
+        if (!session) return;
+
+        currentSessionId = sessionId;
+        const historyContainer = document.getElementById('conversationHistory');
+        if (historyContainer) {
+            historyContainer.innerHTML = ''; // 清空当前
+            
+            // 重新渲染消息
+            session.messages.forEach(msg => {
+                if (msg.role === 'user') {
+                    const userWrapper = document.createElement('div');
+                    userWrapper.className = 'user-message-wrapper';
+                    const userBubble = document.createElement('div');
+                    userBubble.className = 'bubble user-bubble';
+                    
+                    // 处理内容显示（转义HTML并处理换行）
+                    // 检查内容是否已经是HTML（简单的判断）
+                    let displayContent = msg.content;
+                    if (!msg.content.includes('<div class="bubble-content">')) {
+                         const escapedContent = msg.content
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/\n/g, '<br>');
+                        displayContent = `<div class="bubble-content">${escapedContent}</div>`;
+                    }
+                    
+                    userBubble.innerHTML = displayContent;
+                    userWrapper.appendChild(userBubble);
+                    
+                    // 添加复制按钮
+                    const userActions = document.createElement('div');
+                    userActions.className = 'user-bubble-actions';
+                    userActions.innerHTML = `<button class="copy-btn-subtle" onclick="copyUserMessage(this)" title="复制">📋</button>`;
+                    userWrapper.appendChild(userActions);
+
+                    historyContainer.appendChild(userWrapper);
+                } else if (msg.role === 'assistant') {
+                    const aiWrapper = document.createElement('div');
+                    aiWrapper.className = 'ai-message-wrapper';
+                    const aiBubble = document.createElement('div');
+                    aiBubble.className = 'bubble ai-bubble';
+                    // 恢复透明气泡样式
+                    if (msg.isTransparent) {
+                        aiBubble.classList.add('transparent-bubble');
+                    }
+                    
+                    // Determine content to display
+                    let displayContent = marked.parse(msg.content);
+                    // 如果存在结构化数据且可以渲染，则隐藏文本内容，避免重复显示
+                    if (msg.structuredData && Array.isArray(msg.structuredData) && msg.structuredData.length > 0 && typeof renderChapterSummaryDetails === 'function') {
+                        displayContent = ''; 
+                    }
+
+                    aiBubble.innerHTML = `<div class="ai-content">${displayContent}</div><div class="ai-actions"></div>`;
+                    
+                    // 恢复结构化数据
+                    if (msg.structuredData) {
+                        aiBubble._chapterSummaries = msg.structuredData;
+                        if (typeof renderChapterSummaryDetails === 'function') {
+                            renderChapterSummaryDetails(aiBubble, msg.structuredData);
+                        }
+                    }
+                    
+                    // 恢复按钮
+                    const aiActions = document.createElement('div');
+                    aiActions.className = 'ai-bubble-actions';
+                    aiActions.innerHTML = `
+                        <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋</button>
+                    `;
+                    aiWrapper.appendChild(aiBubble);
+                    aiWrapper.appendChild(aiActions);
+                    
+                    // 恢复"存为剧情"按钮
+                    if (msg.structuredData && msg.isTransparent) {
+                         const detailsCard = aiBubble.querySelector('.chapter-summary-details');
+                         if (detailsCard) {
+                            const btnContainer = document.createElement('div');
+                            btnContainer.style.marginTop = '12px';
+                            btnContainer.style.textAlign = 'left';
+                            btnContainer.innerHTML = `<button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>`;
+                            detailsCard.appendChild(btnContainer);
+                         }
+                    } else {
+                        const internalActions = aiBubble.querySelector('.ai-actions');
+                        if (internalActions) {
+                            internalActions.innerHTML = `<button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>`;
+                        }
+                    }
+                    
+                    // 恢复原始文本用于存为剧情
+                    aiBubble._rawContent = msg.rawContent || msg.content;
+                    aiBubble._relatedChapters = msg.relatedChapters || [];
+
+                    historyContainer.appendChild(aiWrapper);
+                }
+            });
+            
+            historyContainer.scrollTop = historyContainer.scrollHeight;
+            const mainContent = document.querySelector('main.main-content');
+            if (mainContent) mainContent.scrollTop = mainContent.scrollHeight;
+        }
+        
+        renderHistoryList();
+        
+        // 添加快捷指令按钮
+        appendQuickCommandButton();
+    }
+
+    function saveMessageToHistory(role, content, extraData = {}) {
+        const sessions = getSessions();
+        let session = null;
+
+        if (currentSessionId) {
+            session = sessions.find(s => s.id === currentSessionId);
+        }
+
+        const timestamp = new Date().toISOString();
+        const message = {
+            role,
+            content,
+            timestamp,
+            ...extraData
+        };
+
+        if (!session) {
+            // 创建新会话
+            currentSessionId = Date.now().toString();
+            // 标题取第一条消息的前20个字
+            let title = content.replace(/<[^>]+>/g, '').substring(0, 20) || '新对话';
+            if (role === 'assistant') title = 'AI回复';
+            
+            session = {
+                id: currentSessionId,
+                title: title,
+                timestamp: timestamp,
+                messages: [message]
+            };
+            sessions.unshift(session); // 加到开头
+        } else {
+            // 更新现有会话
+            session.messages.push(message);
+            session.timestamp = timestamp;
+            // 移到开头
+            const index = sessions.findIndex(s => s.id === currentSessionId);
+            if (index > -1) {
+                sessions.splice(index, 1);
+                sessions.unshift(session);
+            }
+        }
+
+        saveSessions(sessions);
+    }
+
+    function renderHistoryList() {
+        const listContainer = document.getElementById('sidebarHistoryList');
+        if (!listContainer) return;
+
+        const sessions = getSessions();
+        listContainer.innerHTML = '';
+
+        if (sessions.length === 0) {
+            listContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#999;font-size:0.85rem;">暂无历史记录</div>';
+            return;
+        }
+
+        // Group sessions by date
+        const groups = {
+            '今天': [],
+            '昨天': [],
+            '前7天': [],
+            '更早': []
+        };
+
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const yesterday = today - 86400000;
+        const last7Days = today - 86400000 * 7;
+
+        sessions.forEach(session => {
+            const date = new Date(session.timestamp).getTime();
+            if (date >= today) {
+                groups['今天'].push(session);
+            } else if (date >= yesterday) {
+                groups['昨天'].push(session);
+            } else if (date >= last7Days) {
+                groups['前7天'].push(session);
+            } else {
+                groups['更早'].push(session);
+            }
+        });
+
+        // Render groups
+        Object.keys(groups).forEach(key => {
+            const groupSessions = groups[key];
+            if (groupSessions.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'history-group-header';
+                header.textContent = key;
+                listContainer.appendChild(header);
+
+                groupSessions.forEach(session => {
+                    const item = document.createElement('div');
+                    item.className = `history-list-item ${session.id === currentSessionId ? 'active' : ''}`;
+                    
+                    // Title span
+                    const titleSpan = document.createElement('span');
+                    titleSpan.className = 'history-title-text';
+                    titleSpan.textContent = session.title || '无标题对话';
+                    titleSpan.title = session.title;
+                    
+                    // Delete button
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'history-delete-btn';
+                    deleteBtn.innerHTML = '×';
+                    deleteBtn.title = '删除对话';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteSession(session.id);
+                    };
+
+                    item.appendChild(titleSpan);
+                    item.appendChild(deleteBtn);
+                    
+                    item.onclick = () => loadSession(session.id);
+                    listContainer.appendChild(item);
+                });
+            }
+        });
+    }
+
+    function deleteSession(sessionId) {
+        if (!confirm('确定要删除这条对话记录吗？')) return;
+        
+        const sessions = getSessions();
+        const newSessions = sessions.filter(s => s.id !== sessionId);
+        saveSessions(newSessions);
+        
+        if (currentSessionId === sessionId) {
+            createNewSession();
+        }
+    }
+
     // 智能勾选上下文区域的函数
     // mode: 'summary' - 概括章节（只勾选原文章节）
     //       'plot-design' - 剧情设计（只勾选当前原文章节剧情）
@@ -59,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             systemWrapper.appendChild(systemBubble);
             allElements.conversationHistory.appendChild(systemWrapper);
-            allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+            if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
         }
     }
 
@@ -81,9 +385,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // =================================================================
     const allElements = {
         pageBody: document.getElementById('pageBody'),
+        mainContent: document.querySelector('main.main-content'),
         sidebarToggleBtn: document.getElementById('sidebarToggleBtn'),
         sidebarMenuItems: document.querySelectorAll('.sidebar-menu-item'),
-        mainTabs: document.querySelectorAll('.main-tabs .tab-btn'),
+        mainTabs: document.querySelectorAll('.view-switch-btn'), // 更新选择器
         tabContents: document.querySelectorAll('.tab-content'),
         conversationHistory: document.getElementById('conversationHistory'),
         promptInput: document.getElementById('promptInput'),
@@ -94,6 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
         summariesPreviewList: document.getElementById('summaries-preview-list'),
         chaptersPreviewCount: document.getElementById('chapters-preview-count'),
         summariesPreviewCount: document.getElementById('summaries-preview-count'),
+        fabChangeFontBtn: document.getElementById('fabChangeFontBtn'), // 新增字体切换按钮
         fabSelectContextBtn: document.getElementById('fabSelectContextBtn'), 
         fabViewDraftsBtn: document.getElementById('fabViewDraftsBtn'), 
         fabPlotContextBtn: document.getElementById('fabPlotContextBtn'),
@@ -140,10 +446,12 @@ document.addEventListener('DOMContentLoaded', function() {
         clearChaptersBtn: document.getElementById('clear-chapters-btn'),
         clearSummariesBtn: document.getElementById('clear-summaries-btn'),
         clearCurrentPlotBtn: document.getElementById('clear-current-plot-btn'),
+
+        // 占位按钮已移除，保留注释以防未来重新启用
     };
 
     // =================================================================
-    // 3. 文本标签与 localStorage 持久化管理
+    // 3. 初始化与事件绑定
     // =================================================================
     
     function saveContextLabels() {
@@ -525,9 +833,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // 2. 在对话历史中显示用户操作和AI思考状态
         const userBubble = document.createElement('div');
         userBubble.className = 'bubble user-bubble';
-        userBubble.innerHTML = `<p>[动作] 为 ${selectedChapters.length} 个选中章节生成剧情概括</p>`;
+        const actionText = `[动作] 为 ${selectedChapters.length} 个选中章节生成剧情概括`;
+        userBubble.innerHTML = `<div class="bubble-content">${actionText}</div>`;
         allElements.conversationHistory.appendChild(userBubble);
-        allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+        if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
+
+        // 保存用户动作到历史
+        saveMessageToHistory('user', actionText);
 
         // 创建AI消息包装器
         const aiMessageWrapper = document.createElement('div');
@@ -561,7 +873,8 @@ document.addEventListener('DOMContentLoaded', function() {
             Logger.api.response('/api/summarize-chapters', 200, { chapterCount: result.chapter_count });
 
             const aiContentDiv = aiBubble.querySelector('.ai-content');
-            const summaryMarkdown = (() => {
+            // 计算完整的文本摘要（用于保存和日志）
+            const fullSummaryText = (() => {
                 if (result.summary && result.summary.trim()) {
                     return result.summary;
                 }
@@ -570,60 +883,140 @@ document.addEventListener('DOMContentLoaded', function() {
                         .map(item => `## ${item.title || '章节概括'}\n${item.summary || ''}`)
                         .join('\n\n');
                 }
-                return '没有生成剧情概括。';
+                return '';
             })();
 
-            Logger.chapter.summaryResult(summaryMarkdown);
+            // 计算显示的Markdown（用于界面展示）
+            const displayMarkdown = (() => {
+                // 优先检查是否有结构化摘要列表，如果有且能渲染详情，则优先使用详情视图
+                if (Array.isArray(result.summaries) && result.summaries.length > 0) {
+                    if (typeof renderChapterSummaryDetails === 'function') {
+                        return ''; // 将由 renderChapterSummaryDetails 负责渲染，此处返回空字符串以隐藏Markdown视图
+                    }
+                }
+                // 否则显示完整文本
+                return fullSummaryText || '没有生成剧情概括。';
+            })();
+
+            Logger.chapter.summaryResult(fullSummaryText);
 
             // 4. 显示结果
-            aiContentDiv.innerHTML = marked.parse(summaryMarkdown);
-            aiBubble._rawContent = summaryMarkdown; // 保存原始文本，用于"存为剧情"
+            aiContentDiv.innerHTML = marked.parse(displayMarkdown);
+            aiBubble._rawContent = fullSummaryText; // 保存原始文本，用于"存为剧情"
             aiBubble._relatedChapters = selectedChapters; // 关联章节
             aiBubble._chapterSummaries = Array.isArray(result.summaries) ? result.summaries : [];
+            
+            let isTransparent = false;
             if (typeof renderChapterSummaryDetails === 'function') {
+                // 如果有结构化摘要，使用透明气泡模式，去掉外层灰色背景
+                if (aiBubble._chapterSummaries.length > 0) {
+                    aiBubble.classList.add('transparent-bubble');
+                    isTransparent = true;
+                }
                 renderChapterSummaryDetails(aiBubble, aiBubble._chapterSummaries);
             }
 
+            // 保存AI回复到历史
+            saveMessageToHistory('assistant', fullSummaryText, {
+                isTransparent: isTransparent,
+                structuredData: aiBubble._chapterSummaries,
+                rawContent: fullSummaryText,
+                relatedChapters: selectedChapters
+            });
+
             const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
             actionsDiv.innerHTML = `
-                <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋 复制</button>
+                <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋</button>
             `;
             
-            const internalActionsDiv = aiBubble.querySelector('.ai-actions');
-            internalActionsDiv.innerHTML = `
-                <button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>
-            `;
+            // 调整"存为剧情"按钮位置：如果是结构化展示，放入卡片内部；否则放在气泡底部
+            const detailsCard = aiBubble.querySelector('.chapter-summary-details');
+            if (detailsCard && aiBubble.classList.contains('transparent-bubble')) {
+                const btnContainer = document.createElement('div');
+                btnContainer.style.marginTop = '12px';
+                btnContainer.style.textAlign = 'left';
+                btnContainer.innerHTML = `<button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>`;
+                detailsCard.appendChild(btnContainer);
+                
+                // 隐藏原有的内部操作区
+                const internalActionsDiv = aiBubble.querySelector('.ai-actions');
+                if (internalActionsDiv) internalActionsDiv.style.display = 'none';
+            } else {
+                const internalActionsDiv = aiBubble.querySelector('.ai-actions');
+                internalActionsDiv.innerHTML = `
+                    <button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>
+                `;
+            }
             
-            allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+            if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
             appendQuickCommandButton(); // AI响应完成后添加快捷指令按钮
 
         } catch (error) {
             console.error('Error generating summary:', error);
             Logger.api.error('/api/summarize-chapters', error);
             aiBubble.querySelector('.ai-content').textContent = '生成剧情概括时出错，请检查后台服务。';
-            allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+            if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
             appendQuickCommandButton(); // 即使出错也要添加快捷指令按钮
         }
     }
 
 
+    // 获取最近的对话历史
+    function getRecentHistory(limit = 6) {
+        const sessions = getSessions();
+        let session = null;
+        if (currentSessionId) {
+            session = sessions.find(s => s.id === currentSessionId);
+        }
+        
+        if (!session || !session.messages || session.messages.length === 0) {
+            return [];
+        }
+        
+        // 获取最后 limit 条消息，但要排除当前的（因为还没保存进去，或者刚保存进去）
+        // 这里我们直接取最后 limit 条即可，因为 handleSendPrompt 中是在发送请求前调用此函数，
+        // 而 saveMessageToHistory 是在发送请求前调用的，所以最新的这条也会被包含进去。
+        // 但是，我们通常希望 history 是"之前的"对话，不包含"当前的" prompt。
+        // 所以我们需要过滤掉刚刚添加的那条 user message。
+        
+        // 实际上，handleSendPrompt 逻辑是：
+        // 1. saveMessageToHistory('user', userPrompt)
+        // 2. 发送 API 请求
+        
+        // 所以 session.messages 里已经包含了当前这条 userPrompt。
+        // 我们传给后端的 history 应该是"除了当前这条之外的最近 N 条"。
+        
+        const allMessages = session.messages;
+        // 排除最后一条（即当前用户刚刚发送的那条）
+        const historyMessages = allMessages.slice(0, -1);
+        
+        // 取最近的 limit 条
+        return historyMessages.slice(-limit).map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+    }
+
     async function handleSendPrompt() {
         const userPrompt = allElements.promptInput.value.trim();
         if (!userPrompt) return alert('请输入你的要求！');
+
+        // 锁定按钮防止重复提交
+        allElements.sendPromptBtn.disabled = true;
         
         // 智能勾选：根据用户输入判断需要哪些上下文
         if (isPlotDesignIntent(userPrompt)) {
-            // 如果是剧情设计类需求，只勾选当前原文章节剧情
-            smartSelectContext('plot-design');
-        } else {
-            // 常规对话，确保剧情梗概被勾选（如果有的话）
-            smartSelectContext('general');
-        }
-        
-        let contextParts = [];
-        
-        // 添加选中的上下文
-        if (allElements.masterCheckboxChapters.checked && chaptersForPreview.length > 0) {
+                // 如果是剧情设计类需求，只勾选当前原文章节剧情
+                smartSelectContext('plot-design');
+            } else {
+                // 常规对话，确保剧情梗概被勾选（如果有的话）
+                smartSelectContext('general');
+            }
+            
+            let contextParts = [];
+            
+            // 添加选中的上下文
+            if (allElements.masterCheckboxChapters.checked && chaptersForPreview.length > 0) {
             chaptersForPreview.forEach(chapter => {
                 contextParts.push(`【上下文章节：${chapter.title}】\n${chapter.content}`);
             });
@@ -659,16 +1052,20 @@ document.addEventListener('DOMContentLoaded', function() {
         // 创建按钮容器
         const userActions = document.createElement('div');
         userActions.className = 'user-bubble-actions';
-        userActions.innerHTML = `<button class="copy-btn-subtle" onclick="copyUserMessage(this)" title="复制">📋 复制</button>`;
+        userActions.innerHTML = `<button class="copy-btn-subtle" onclick="copyUserMessage(this)" title="复制">📋</button>`;
         
         // 将气泡和按钮添加到容器
         userMessageWrapper.appendChild(userBubble);
         userMessageWrapper.appendChild(userActions);
         
         allElements.conversationHistory.appendChild(userMessageWrapper);
+        
+        // 保存用户消息到历史记录
+        saveMessageToHistory('user', userPrompt);
+
         allElements.promptInput.value = '';
         allElements.promptInput.style.height = 'auto';
-        allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+        if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
 
         // 创建AI消息包装器
         const aiMessageWrapper = document.createElement('div');
@@ -707,6 +1104,7 @@ document.addEventListener('DOMContentLoaded', function() {
             contextChapters: selectedContextChapters,
             contextLabels,
             fileId: currentNovel ? currentNovel.file_id : null,
+            history: getRecentHistory(6) // 添加历史记录，最近6条
         };
 
         Logger.api.request('/api/generate-with-analysis', 'POST', {
@@ -732,16 +1130,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 aiContentDiv.innerHTML = marked.parse(result.content);
                 aiBubble._rawContent = result.content;
                 
+                // 保存AI回复到历史记录
+                saveMessageToHistory('assistant', result.content);
+
                 // 复制按钮放在气泡外的左下方
                 const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
                 actionsDiv.innerHTML = `
-                    <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋 复制</button>
+                    <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋</button>
                 `;
                 
                 // 清空内部actions区域
                 aiBubble.querySelector('.ai-actions').innerHTML = '';
                 
-                allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+                if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
                 appendQuickCommandButton(); // AI响应完成后添加快捷指令按钮
                 return; // 提前返回，不执行小说创作相关逻辑
             }
@@ -750,6 +1151,12 @@ document.addEventListener('DOMContentLoaded', function() {
             aiContentDiv.innerHTML = marked.parse(result.content);
             aiBubble._rawContent = result.content;
             aiBubble._relatedChapters = chaptersForPreview; 
+
+            // 保存AI回复到历史记录（包含额外信息）
+            saveMessageToHistory('assistant', result.content, {
+                relatedChapters: chaptersForPreview,
+                structuredData: result.chapters // 如果有结构化章节数据
+            });
 
             if (result.is_new && !currentNovel) {
                 currentNovel = { file_id: result.file_id, filename: result.filename, chapters: result.chapters };
@@ -763,7 +1170,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 复制按钮放在气泡外的左下方
             const actionsDiv = aiMessageWrapper.querySelector('.ai-bubble-actions');
             actionsDiv.innerHTML = `
-                <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋 复制</button>
+                <button class="copy-btn-subtle copy-btn-large" onclick="copyToClipboard(this)" title="复制内容">📋</button>
             `;
             
             // 其他操作按钮保留在气泡内
@@ -773,15 +1180,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button class="btn btn-sm btn-plot" onclick="addToPlotContext(this)">存为剧情</button>
             `;
             
-            allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+            if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
             appendQuickCommandButton(); // AI响应完成后添加快捷指令按钮
 
         } catch (error) {
             console.error('Error sending prompt:', error);
             Logger.api.error('/api/generate-with-analysis', error);
             aiBubble.querySelector('.ai-content').textContent = `请求出错: ${error.message}`;
-            allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+            if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
             appendQuickCommandButton(); // 即使出错也要添加快捷指令按钮
+        } finally {
+            // 无论成功失败，都恢复按钮状态
+            allElements.sendPromptBtn.disabled = false;
+            // 聚焦回输入框
+            allElements.promptInput.focus();
         }
     }
     
@@ -875,8 +1287,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function closeModal(modal) { modal.classList.remove('active'); }
     
     function appendQuickCommandButton() {
+        const historyContainer = document.getElementById('conversationHistory');
+        if (!historyContainer) return;
+
         // 移除任何已存在的快捷指令按钮，防止重复
-        const existingButton = document.querySelector('.quick-command-wrapper');
+        const existingButton = historyContainer.querySelector('.quick-command-wrapper');
         if (existingButton) {
             existingButton.remove();
         }
@@ -898,8 +1313,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 放入容器并添加到对话历史
         wrapper.appendChild(button);
-        allElements.conversationHistory.appendChild(wrapper);
-        allElements.conversationHistory.scrollTop = allElements.conversationHistory.scrollHeight;
+        historyContainer.appendChild(wrapper);
+        if (allElements.mainContent) allElements.mainContent.scrollTop = allElements.mainContent.scrollHeight;
     }
 
     document.querySelectorAll('.close-modal-btn').forEach(btn => btn.addEventListener('click', (e) => closeModal(e.target.closest('.modal'))));
@@ -917,8 +1332,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- 核心交互逻辑 ---
-    allElements.sendPromptBtn.addEventListener('click', handleSendPrompt);
-    allElements.promptInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { handleSendPrompt(); } });
+    // 移除旧的监听器（防止重复）并添加新的
+    if (allElements.sendPromptBtn) {
+        const newSendBtn = allElements.sendPromptBtn.cloneNode(true);
+        allElements.sendPromptBtn.parentNode.replaceChild(newSendBtn, allElements.sendPromptBtn);
+        allElements.sendPromptBtn = newSendBtn; // 更新引用
+        allElements.sendPromptBtn.addEventListener('click', handleSendPrompt);
+    }
+
+    if (allElements.promptInput) {
+        allElements.promptInput.addEventListener('keydown', (e) => { 
+            if (e.key === 'Enter' && e.ctrlKey) { 
+                e.preventDefault(); // 防止换行
+                handleSendPrompt(); 
+            } 
+        });
+    }
     
     // 自动调节输入框高度
     function autoResizeTextarea() {
@@ -997,30 +1426,163 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    allElements.fabViewDraftsBtn.addEventListener('click', () => { renderDraftsModal(); openModal(allElements.viewDraftsModal); });
-    allElements.fabPlotContextBtn.addEventListener('click', () => { renderPlotContextModal(); openModal(allElements.plotContextModal); });
+    if (allElements.fabViewDraftsBtn) {
+        allElements.fabViewDraftsBtn.addEventListener('click', () => { renderDraftsModal(); openModal(allElements.viewDraftsModal); });
+    }
+    if (allElements.fabPlotContextBtn) {
+        allElements.fabPlotContextBtn.addEventListener('click', () => { renderPlotContextModal(); openModal(allElements.plotContextModal); });
+    }
     
     // 【新增】全选/取消全选章节
-    allElements.selectAllChaptersButton.addEventListener('click', () => {
-        const checkboxes = allElements.chapterListForSelection.querySelectorAll('.chapter-select-checkbox');
-        const isAllSelected = Array.from(checkboxes).every(checkbox => checkbox.checked);
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = !isAllSelected;
+    if (allElements.selectAllChaptersButton) {
+        allElements.selectAllChaptersButton.addEventListener('click', () => {
+            const checkboxes = allElements.chapterListForSelection.querySelectorAll('.chapter-select-checkbox');
+            const isAllSelected = Array.from(checkboxes).every(checkbox => checkbox.checked);
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = !isAllSelected;
+            });
+            allElements.selectAllChaptersButton.textContent = !isAllSelected ? '取消全选' : '全选';
         });
-        allElements.selectAllChaptersButton.textContent = !isAllSelected ? '取消全选' : '全选';
+    }
+
+    // 【新增】字体设置逻辑 (重构)
+    const fontClasses = ['', 'font-serif', 'font-mono', 'font-cursive'];
+    const sizeClasses = ['text-sm', 'text-md', 'text-lg', 'text-xl'];
+    const sizeNames = ['小', '标准', '大', '特大'];
+    
+    let currentFontIndex = 0;
+    let currentSizeIndex = 1; // 默认为标准 (text-md)
+
+    // 初始化加载保存的设置
+    const savedFontIndex = localStorage.getItem('novel_assist_font_preference');
+    if (savedFontIndex !== null) {
+        currentFontIndex = parseInt(savedFontIndex, 10);
+        if (fontClasses[currentFontIndex]) {
+            document.body.classList.add(fontClasses[currentFontIndex]);
+        }
+    }
+    
+    const savedSizeIndex = localStorage.getItem('novel_assist_font_size_preference');
+    if (savedSizeIndex !== null) {
+        currentSizeIndex = parseInt(savedSizeIndex, 10);
+    }
+    // 应用初始字体大小
+    if (sizeClasses[currentSizeIndex]) {
+        document.body.classList.add(sizeClasses[currentSizeIndex]);
+    }
+
+    // DOM 元素引用
+    const fontSettingsMenu = document.getElementById('fontSettingsMenu');
+    const fontOptionBtns = document.querySelectorAll('.font-option-btn');
+    const decreaseFontSizeBtn = document.getElementById('decreaseFontSizeBtn');
+    const increaseFontSizeBtn = document.getElementById('increaseFontSizeBtn');
+    const fontSizeDisplay = document.getElementById('fontSizeDisplay');
+
+    // 更新UI状态
+    function updateFontSettingsUI() {
+        // 更新字体按钮激活状态
+        fontOptionBtns.forEach(btn => {
+            if (parseInt(btn.dataset.font) === currentFontIndex) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // 更新字体大小显示
+        if (fontSizeDisplay) {
+            fontSizeDisplay.textContent = sizeNames[currentSizeIndex];
+        }
+        
+        // 更新大小按钮禁用状态
+        if (decreaseFontSizeBtn) decreaseFontSizeBtn.disabled = currentSizeIndex <= 0;
+        if (increaseFontSizeBtn) increaseFontSizeBtn.disabled = currentSizeIndex >= sizeClasses.length - 1;
+    }
+
+    // 切换菜单显示
+    if (allElements.fabChangeFontBtn) {
+        allElements.fabChangeFontBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fontSettingsMenu.classList.toggle('active');
+            updateFontSettingsUI();
+        });
+    }
+
+    // 点击外部关闭菜单
+    window.addEventListener('click', (e) => {
+        if (fontSettingsMenu && fontSettingsMenu.classList.contains('active')) {
+            if (!fontSettingsMenu.contains(e.target) && !allElements.fabChangeFontBtn.contains(e.target)) {
+                fontSettingsMenu.classList.remove('active');
+            }
+        }
+    });
+    
+    // 阻止菜单内部点击冒泡
+    if (fontSettingsMenu) {
+        fontSettingsMenu.addEventListener('click', (e) => e.stopPropagation());
+    }
+
+    // 字体选择事件
+    fontOptionBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const newIndex = parseInt(btn.dataset.font);
+            if (newIndex === currentFontIndex) return;
+
+            // 移除旧字体
+            if (fontClasses[currentFontIndex]) {
+                document.body.classList.remove(fontClasses[currentFontIndex]);
+            }
+            
+            currentFontIndex = newIndex;
+            
+            // 添加新字体
+            if (fontClasses[currentFontIndex]) {
+                document.body.classList.add(fontClasses[currentFontIndex]);
+            }
+            
+            localStorage.setItem('novel_assist_font_preference', currentFontIndex);
+            updateFontSettingsUI();
+        });
     });
 
+    // 字体大小调整事件
+    if (decreaseFontSizeBtn) {
+        decreaseFontSizeBtn.addEventListener('click', () => {
+            if (currentSizeIndex > 0) {
+                document.body.classList.remove(sizeClasses[currentSizeIndex]);
+                currentSizeIndex--;
+                document.body.classList.add(sizeClasses[currentSizeIndex]);
+                localStorage.setItem('novel_assist_font_size_preference', currentSizeIndex);
+                updateFontSettingsUI();
+            }
+        });
+    }
+
+    if (increaseFontSizeBtn) {
+        increaseFontSizeBtn.addEventListener('click', () => {
+            if (currentSizeIndex < sizeClasses.length - 1) {
+                document.body.classList.remove(sizeClasses[currentSizeIndex]);
+                currentSizeIndex++;
+                document.body.classList.add(sizeClasses[currentSizeIndex]);
+                localStorage.setItem('novel_assist_font_size_preference', currentSizeIndex);
+                updateFontSettingsUI();
+            }
+        });
+    }
+
     // 【修改】点击“加载小说”按钮的逻辑
-    allElements.fabSelectContextBtn.addEventListener('click', () => {
-        if(currentNovel) {
-            // 如果已有小说，直接显示章节选择界面
-            showChapterSelectionView();
-        } else {
-            // 否则，显示上传界面
-            showUploadView();
-        }
-        openModal(allElements.selectSourceModal);
-    });
+    if (allElements.fabSelectContextBtn) {
+        allElements.fabSelectContextBtn.addEventListener('click', () => {
+            if(currentNovel) {
+                // 如果已有小说，直接显示章节选择界面
+                showChapterSelectionView();
+            } else {
+                // 否则，显示上传界面
+                showUploadView();
+            }
+            openModal(allElements.selectSourceModal);
+        });
+    }
 
     // --- 加载小说模态框内部逻辑 ---
     allElements.uploadArea.addEventListener('click', () => allElements.fileInput.click());
@@ -1212,17 +1774,20 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     function renderPlotPreview(summary) {
-        allElements.plotPreviewArea.innerHTML = `<h3>${summary.title}</h3><div style="white-space: pre-wrap; margin-top: 10px;">${summary.content}</div>`;
+        allElements.plotPreviewArea.innerHTML = `<h3>${summary.title}</h3><div style="white-space: pre-wrap">${summary.content}</div>`;
     }
-    allElements.selectAllPlotsButton.addEventListener('click', () => {
-        if (allElements.selectAllPlotsButton.disabled) return;
-        const checkboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox');
-        const isAllSelected = Array.from(checkboxes).every(cb => cb.checked);
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = !isAllSelected;
+
+    if (allElements.selectAllPlotsButton) {
+        allElements.selectAllPlotsButton.addEventListener('click', () => {
+            if (allElements.selectAllPlotsButton.disabled) return;
+            const checkboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox');
+            const isAllSelected = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = !isAllSelected;
+            });
+            allElements.selectAllPlotsButton.textContent = !isAllSelected ? '取消全选' : '全选';
         });
-        allElements.selectAllPlotsButton.textContent = !isAllSelected ? '取消全选' : '全选';
-    });
+    }
 
     if (allElements.clearPlotSelectionsBtn) {
         allElements.clearPlotSelectionsBtn.addEventListener('click', () => {
@@ -1327,28 +1892,30 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // 新增：为"添加到当前原文剧情"按钮添加事件监听
-    allElements.addSelectedPlotsToCurrentChapterPlotBtn.addEventListener('click', () => {
-        const selectedCheckboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox:checked');
-        if (selectedCheckboxes.length === 0) {
-            alert('请至少选中一个剧情');
-            return;
-        }
+    if (allElements.addSelectedPlotsToCurrentChapterPlotBtn) {
+        allElements.addSelectedPlotsToCurrentChapterPlotBtn.addEventListener('click', () => {
+            const selectedCheckboxes = allElements.plotListContainer.querySelectorAll('.plot-select-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                alert('请至少选中一个剧情');
+                return;
+            }
 
-        const selectedIds = Array.from(selectedCheckboxes).map(cb => String(cb.value));
-        currentChapterPlotForPreview = plotContextSummaries.filter(summary => selectedIds.includes(String(summary.id)));
+            const selectedIds = Array.from(selectedCheckboxes).map(cb => String(cb.value));
+            currentChapterPlotForPreview = plotContextSummaries.filter(summary => selectedIds.includes(String(summary.id)));
 
-        updateCurrentChapterPlotPreview();
-        
-        // 自动勾选"当前原文章节剧情"复选框
-        if (currentChapterPlotForPreview.length > 0) {
-            allElements.masterCheckboxCurrentChapterPlot.checked = true;
-            allElements.masterCheckboxCurrentChapterPlot.disabled = false;
-            // 触发change事件以更新上下文摘要
-            updateSelectedContextSummary();
-        }
-        
-        closeModal(allElements.plotContextModal);
-    });
+            updateCurrentChapterPlotPreview();
+            
+            // 自动勾选"当前原文章节剧情"复选框
+            if (currentChapterPlotForPreview.length > 0) {
+                allElements.masterCheckboxCurrentChapterPlot.checked = true;
+                allElements.masterCheckboxCurrentChapterPlot.disabled = false;
+                // 触发change事件以更新上下文摘要
+                updateSelectedContextSummary();
+            }
+            
+            closeModal(allElements.plotContextModal);
+        });
+    }
 
     function updateDraftCountBadge() {
         allElements.draftsCountSpan.textContent = myDrafts.length;
@@ -1568,7 +2135,22 @@ document.addEventListener('DOMContentLoaded', function() {
     window.copyToClipboard = function(button) { 
         // 现在按钮在 ai-message-wrapper 内，需要找到同级的 ai-bubble
         const wrapper = button.closest('.ai-message-wrapper');
-        const content = wrapper.querySelector('.ai-content').innerText; 
+        const bubble = wrapper.querySelector('.ai-bubble');
+        
+        let content = '';
+        // 优先使用保存的原始文本（如果有）
+        if (bubble && bubble._rawContent) {
+            content = bubble._rawContent;
+        } else {
+            // 否则尝试获取显示文本
+            const contentDiv = wrapper.querySelector('.ai-content');
+            content = contentDiv ? contentDiv.innerText : '';
+        }
+
+        if (!content) {
+            return alert('没有可复制的内容');
+        }
+
         navigator.clipboard.writeText(content).then(() => { 
             alert('内容已复制到剪贴板！'); 
         }, () => { 
@@ -1618,7 +2200,10 @@ document.addEventListener('DOMContentLoaded', function() {
     loadContextLabels();
 
     // 为可编辑标签添加事件监听
-    allElements.chaptersLabel.addEventListener('blur', saveContextLabels);
-    allElements.summariesLabel.addEventListener('blur', saveContextLabels);
-    allElements.currentChapterPlotLabel.addEventListener('blur', saveContextLabels);
+    if (allElements.chaptersLabel) allElements.chaptersLabel.addEventListener('blur', saveContextLabels);
+    if (allElements.summariesLabel) allElements.summariesLabel.addEventListener('blur', saveContextLabels);
+    if (allElements.currentChapterPlotLabel) allElements.currentChapterPlotLabel.addEventListener('blur', saveContextLabels);
+
+    // 初始化历史系统
+    initHistorySystem();
 });

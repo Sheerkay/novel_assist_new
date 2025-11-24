@@ -34,6 +34,7 @@ class ContentGenerationTool:
     def run(self, payload: Dict[str, Any], context: ToolExecutionContext) -> ToolResult:
         intent = payload.get("intent", "default")
         user_prompt = payload.get("prompt", "")
+        history = payload.get("history", [])
         metadata = payload.get("metadata", {})
 
         context_manager = self._resolve_context_manager(payload, context)
@@ -72,6 +73,7 @@ class ContentGenerationTool:
             user_prompt=user_prompt,
             system_prompt_name=config["system"],
             template_name=config["template"],
+            history=history,
         )
 
         full_prompt = "\n\n".join([f"[{msg['role']}]\n{msg['content']}" for msg in messages])

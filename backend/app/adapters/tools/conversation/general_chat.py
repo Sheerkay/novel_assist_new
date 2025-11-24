@@ -16,11 +16,21 @@ class GeneralChatTool:
 
     def run(self, payload: Dict[str, Any], context: ToolExecutionContext) -> ToolResult:
         prompt = payload.get("prompt", "")
+        history = payload.get("history", [])
         system_prompt = get_system_prompt("general_chat_system")
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
         ]
+        
+        if history:
+            for msg in history:
+                role = msg.get('role')
+                content = msg.get('content')
+                if role and content:
+                    messages.append({"role": role, "content": content})
+
+        messages.append({"role": "user", "content": prompt})
+        
         response = call_chat_completion(messages, temperature=0.7, max_tokens=2000)
         if response and response.get("choices"):
             content = response["choices"][0]["message"]["content"]

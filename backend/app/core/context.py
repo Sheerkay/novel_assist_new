@@ -58,6 +58,7 @@ class ContextManager:
         user_prompt: str,
         system_prompt_name: str,
         template_name: str | None,
+        history: List[Dict[str, str]] | None = None,
     ) -> List[Dict[str, str]]:
         """Compose the conversation history delivered to the LLM."""
 
@@ -79,10 +80,18 @@ class ContextManager:
         else:
             user_message = user_prompt
 
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
+        messages = [{"role": "system", "content": system_prompt}]
+
+        if history:
+            for msg in history:
+                role = msg.get('role')
+                content = msg.get('content')
+                if role and content:
+                    messages.append({"role": role, "content": content})
+
+        messages.append({"role": "user", "content": user_message})
+
+        return messages
 
     def clear(self) -> None:
         """Reset all cached context information."""

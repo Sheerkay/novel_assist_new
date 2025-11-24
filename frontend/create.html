@@ -21,6 +21,15 @@
         </header>
 
         <div class="page-body" id="pageBody">
+            <script>
+                (function() {
+                    const savedState = localStorage.getItem('sidebar-collapsed');
+                    const shouldCollapse = savedState === null ? true : savedState === 'true';
+                    if (shouldCollapse) {
+                        document.getElementById('pageBody').classList.add('sidebar-collapsed');
+                    }
+                })();
+            </script>
             <nav class="app-sidebar">
                 <ul class="sidebar-menu">
                     <li class="sidebar-menu-item">
@@ -39,14 +48,7 @@
                             <span>创作小说</span>
                         </a>
                     </li>
-                    <li class="sidebar-menu-item">
-                        <a href="history.html">
-                            <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3Z"/>
-                            </svg>
-                            <span>历史对话</span>
-                        </a>
-                    </li>
+                    <!-- 历史对话模块已整合到侧边栏，移除独立页面入口 -->
                     <li class="sidebar-menu-item">
                         <a href="logs.html">
                             <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">

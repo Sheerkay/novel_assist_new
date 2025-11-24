@@ -13,6 +13,7 @@ class PlannerRequest(BaseModel):
     intent: str = Field(..., description="High level intent inferred from the user prompt")
     prompt: str = Field(..., description="Raw user prompt")
     context: str = Field("", description="Flattened contextual text snippets")
+    history: List[Dict[str, str]] = Field(default_factory=list, description="Conversation history")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Arbitrary metadata")
 
 

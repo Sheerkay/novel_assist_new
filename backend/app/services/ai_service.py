@@ -121,6 +121,7 @@ def generate_content_with_intent(
     *,
     context_text: str = "",
     context_chapters: List[Dict[str, Any]] | None = None,
+    history: List[Dict[str, str]] | None = None,
     metadata: Dict[str, Any] | None = None,
 ) -> PlannerResult:
     """根据意图生成内容（使用代理编排）"""
@@ -135,6 +136,7 @@ def generate_content_with_intent(
         intent=intent,
         prompt=user_prompt,
         context=context_text or "",
+        history=history or [],
         metadata=metadata_payload,
     )
     return orchestrator.run(request)

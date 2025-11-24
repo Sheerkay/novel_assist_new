@@ -41,32 +41,6 @@ function highlightCurrentPage() {
     });
 }
 
-// 通用模态框控制
-function openModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.add('active');
-    }
-}
-
-function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.remove('active');
-    }
-}
-
-// 通用工具函数：格式化时间
-function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
-}
-
 // 通用工具函数：显示Toast提示
 function showToast(message, type = 'info') {
     // 创建toast元素
@@ -144,11 +118,11 @@ function renderChapterSummaryDetails(container, summaries) {
     heading.textContent = '章节概括详情';
     wrapper.appendChild(heading);
 
-    const list = document.createElement('ol');
+    const list = document.createElement('div');
     list.className = 'chapter-summary-list';
 
     summaries.forEach((item, index) => {
-        const li = document.createElement('li');
+        const li = document.createElement('div');
         li.className = 'chapter-summary-item';
 
         const titleRow = document.createElement('div');
@@ -160,10 +134,10 @@ function renderChapterSummaryDetails(container, summaries) {
         title.textContent = displayTitle;
         titleRow.appendChild(title);
 
-        const status = document.createElement('span');
-        status.className = `summary-status ${item && item.success ? 'is-success' : 'is-failed'}`;
-        status.textContent = item && item.success ? '成功' : '失败';
-        titleRow.appendChild(status);
+        // const status = document.createElement('span');
+        // status.className = `summary-status ${item && item.success ? 'is-success' : 'is-failed'}`;
+        // status.textContent = item && item.success ? '成功' : '失败';
+        // titleRow.appendChild(status);
 
         const lengthTag = document.createElement('span');
         lengthTag.className = 'summary-length';

@@ -21,7 +21,10 @@ class PlannerAgent:
                     description="生成普通对话回复",
                     tool=ToolInvocation(
                         name="conversation.general_chat",
-                        payload={"prompt": request.prompt},
+                        payload={
+                            "prompt": request.prompt,
+                            "history": request.history,
+                        },
                     ),
                 )
             )
@@ -107,6 +110,7 @@ class PlannerAgent:
                     payload={
                         "intent": request.intent,
                         "prompt": request.prompt,
+                        "history": request.history,
                         "metadata": request.metadata,
                     },
                 ),

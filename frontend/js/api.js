@@ -43,29 +43,6 @@ const api = {
         });
     },
 
-    getChapters: (fileId) => {
-        return request(`/chapters/${fileId}`);
-    },
-
-    getChapterSummary: (fileId, chapterIndex) => {
-        return request('/chapter-summary', {
-            method: 'POST',
-            body: { file_id: fileId, chapter_index: chapterIndex },
-        });
-    },
-
-    generate: (prompt, context, context_chapters, context_labels) => {
-        return request('/generate', {
-            method: 'POST',
-            body: {
-                prompt,
-                context,
-                context_chapters,
-                context_labels,
-            },
-        });
-    },
-
     generateWithAnalysis: ({
         prompt,
         contextString = '',
@@ -87,13 +64,6 @@ const api = {
         return request('/generate-with-analysis', {
             method: 'POST',
             body,
-        });
-    },
-    
-    processChapter: (fileId, chapterIndex, prompt) => {
-        return request('/process-chapter', {
-            method: 'POST',
-            body: { file_id: fileId, chapter_index: chapterIndex, prompt: prompt },
         });
     },
 

@@ -305,6 +305,7 @@ def generate_content():
     context = data.get('context', '')
     context_chapters = data.get('context_chapters', [])
     context_labels = data.get('context_labels', {})
+    history = data.get('history', [])
     intent = data.get('intent', 'novel_generation')
 
     if not prompt:
@@ -318,6 +319,7 @@ def generate_content():
         prompt,
         context_text=context,
         context_chapters=context_chapters,
+        history=history,
         metadata={
             'context_labels': context_labels,
         } if context_labels else None,

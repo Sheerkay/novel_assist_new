@@ -17,11 +17,34 @@
                     </svg>
                 </button>
                 <div class="logo">AI写网文助手 - 编辑续写</div>
+                
+                <!-- 顶部视图切换器 (仅在编辑续写模式显示) -->
+                <div class="header-view-switcher">
+                    <button class="view-switch-btn active" data-tab="plot-design">剧情设计</button>
+                    <button class="view-switch-btn" data-tab="generate-text">生成原文</button>
+                </div>
             </div>
         </header>
 
         <div class="page-body" id="pageBody">
+            <script>
+                (function() {
+                    const savedState = localStorage.getItem('sidebar-collapsed');
+                    const shouldCollapse = savedState === null ? true : savedState === 'true';
+                    if (shouldCollapse) {
+                        document.getElementById('pageBody').classList.add('sidebar-collapsed');
+                    }
+                })();
+            </script>
             <nav class="app-sidebar">
+                <div class="sidebar-action-area">
+                    <button id="newChatBtn" class="new-chat-btn" title="开启新对话">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                            <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
+                        </svg>
+                        <span>开启新对话</span>
+                    </button>
+                </div>
                 <ul class="sidebar-menu">
                     <li class="sidebar-menu-item active">
                         <a href="index.html">
@@ -30,6 +53,14 @@
                             </svg>
                             <span>编辑续写</span>
                         </a>
+                        <div class="sidebar-history-section">
+                            <div class="sidebar-history-header">
+                                <span class="history-title">近期对话</span>
+                            </div>
+                            <div class="sidebar-history-list" id="sidebarHistoryList">
+                                <!-- 历史对话列表将通过JS动态加载 -->
+                            </div>
+                        </div>
                     </li>
                     <li class="sidebar-menu-item">
                         <a href="create.html">
@@ -39,14 +70,7 @@
                             <span>创作小说</span>
                         </a>
                     </li>
-                    <li class="sidebar-menu-item">
-                        <a href="history.html">
-                            <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3Z"/>
-                            </svg>
-                            <span>历史对话</span>
-                        </a>
-                    </li>
+                    <!-- 历史对话模块已整合到侧边栏，移除独立页面入口 -->
                     <li class="sidebar-menu-item">
                         <a href="logs.html">
                             <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
@@ -59,12 +83,13 @@
             </nav>
 
             <main class="main-content">
-                <div class="main-tabs-container">
+                <!-- 移除旧的标签栏容器 -->
+                <!-- <div class="main-tabs-container">
                     <div class="main-tabs">
                         <button class="tab-btn active" data-tab="plot-design">剧情设计</button>
                         <button class="tab-btn" data-tab="generate-text">生成原文</button>
                     </div>
-                </div>
+                </div> -->
 
                 <div class="workspace">
                     <div id="plot-design-view" class="tab-content">
@@ -109,6 +134,34 @@
 
     <!-- 悬浮按钮 -->
     <div class="floating-action-bar">
+        <div style="position: relative;">
+            <button class="fab-btn" id="fabChangeFontBtn" title="字体设置">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M9.93,13.5H14.07L12,7.9L9.93,13.5M12,2L2,22H5.26L7.26,16H16.73L18.73,22H22L12,2M7,14L12,0.5L17,14H7Z" />
+                </svg>
+                <span>字体设置</span>
+            </button>
+            <!-- 字体设置菜单 -->
+            <div id="fontSettingsMenu" class="font-settings-menu">
+                <div class="font-settings-section">
+                    <div class="font-settings-title">字体样式</div>
+                    <div class="font-options-grid">
+                        <button class="font-option-btn active" data-font="0">默认</button>
+                        <button class="font-option-btn" data-font="1" style="font-family: serif;">衬线</button>
+                        <button class="font-option-btn" data-font="2" style="font-family: monospace;">等宽</button>
+                        <button class="font-option-btn" data-font="3" style="font-family: cursive;">楷体</button>
+                    </div>
+                </div>
+                <div class="font-settings-section">
+                    <div class="font-settings-title">字体大小</div>
+                    <div class="font-size-controls">
+                        <button class="font-size-btn" id="decreaseFontSizeBtn">A-</button>
+                        <span class="font-size-display" id="fontSizeDisplay">标准</span>
+                        <button class="font-size-btn" id="increaseFontSizeBtn">A+</button>
+                    </div>
+                </div>
+            </div>
+        </div>
         <button class="fab-btn" id="fabSelectContextBtn" title="加载小说原文">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13.5,16V19H10.5V16H8L12,12L16,16H13.5M13,9V3.5L18.5,9H13Z" />
